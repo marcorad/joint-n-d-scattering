@@ -7,6 +7,15 @@ from torch import Tensor
 class SeparableScattering:
     backend: TorchBackend = TorchBackend()
     def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds = True) -> None:
+        """Create a separable scattering object, which precalculates the filters.
+
+        Args:
+            N (List[int]): The size of each dimension in scattering, corresponding to the input shape (Nbatch, *N).
+            d (List[int]): A list of downsampling factors for each dimension, ordered according their appearance in the input.
+            Q (List[List[float]]): A list containing the Qs used for each level of the scattering operation. Each item should be a list with Q corresponding to a specific dimension.
+            startfreq (List[float], optional): The starting frequencies to place the filters of first-level scattering. When None, the frequency domain is fully covered. Defaults to None.
+            allow_ds (bool, optional): Allow downsampling to occur for efficient computation. Defaults to True.
+        """
         self.pad = []
         self.Npad = []
         self.Ndim = len(N)
@@ -14,7 +23,7 @@ class SeparableScattering:
         self.Q = Q
         self.Nlevels = len(Q)
         self.allow_ds = allow_ds
-        assert self.Nlevels <= 3, f'Requested {self.Nlevels} scattering levels. A maximum of 3 levels is supported. Higher levels than 3 are typically not useful.'
+        assert self.Nlevels <= 3, f'Requested {self.Nlevels} scattering levels. A maximum of 3 levels is supported. More than 3 levels are typically not useful.'
         assert all([d[i] <= N[i] for i in range(self.Ndim)]), f'All invariance scales {d} must be <= the signal support {N}.'
         for i in reversed(range(self.Ndim)):
             l, r, n = calculate_padding_1d(N[i], d[i])
@@ -25,7 +34,7 @@ class SeparableScattering:
         self.fb = scattering_filterbanks(self.Npad, d, Q, startfreq, allow_ds)
         filterbank_to_tensor(self.fb)
         
-    def _mul_and_downsample(self, X: Tensor, level: int, input_ds: List[int], lambdas: List[float]):
+    def _mul_and_downsample(self, X: Tensor, level: int, input_ds: List[int], lambdas: List[float]):        
         mul1d = lambda x, y, dim: self.backend.mul1d(x, y, dim+1) #+1 to account for batch dim
         freqds = lambda x, d, dim: self.backend.freq_downsample1d(x, d, dim+1)
         for dim in range(self.Ndim):
@@ -84,7 +93,16 @@ class SeparableScattering:
             bws.append(abs(lambda_filt[i]) - sigma_psi_w_filt > sigma_psi_w_demod)           
         return False
     
-    def scattering(self, x: Tensor, normalise = False):
+    def scattering(self, x: Tensor, normalise = False) -> Tensor:
+        """Perform a separable scattering transform on a real signal x.
+
+        Args:
+            x (Tensor): A tensor with shape (Nbatch, ...), the dimensions from 1 onwards are the scattering dimensions.
+            normalise (bool, optional): normalise scattering coefficients with respect to the previous level. Defaults to False.
+
+        Returns:
+            Tensor: The scattering features, with the last axis corresponding to the various filters paths.
+        """
         S, _, _, _ = self._scattering(x, False, False, normalise)        
         return self.backend.stack(S)
     
@@ -137,7 +155,10 @@ class SeparableScattering:
         EPS = 1e-10
         return x1 / (xn + EPS)
         
-    def _scattering(self, x: Tensor, returnU = False, returnSpath = False, normalise=False):        
+    def _scattering(self, x: Tensor, returnU = False, returnSpath = False, normalise=False):      
+        
+        # Kymatio's scattering has a near-identical implementation
+          
         #function aliases for clarity        
         unpad = lambda x: self.backend.unpad(x) if self.allow_ds else x #disable unpadding when DS occurs
         pad = lambda x, s: self.backend.pad(x, s)
