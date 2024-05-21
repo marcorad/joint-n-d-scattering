@@ -187,7 +187,7 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticD
 from sklearn.model_selection import train_test_split
 
 from mnist import MNIST
-mndata = MNIST('../../python-mnist/data')
+mndata = MNIST('../python-mnist/data') #requires the python-mnist repo (https://pypi.org/project/python-mnist/) to be in the same directory as this repo
 X_train, y_train = mndata.load_training()
 X_test, y_test = mndata.load_testing()
 X_train = torch.from_numpy(np.array(X_train).reshape((-1, 28, 28))).type(cfg.REAL_DTYPE)
