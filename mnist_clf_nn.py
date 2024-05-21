@@ -36,8 +36,6 @@ from sklearn.preprocessing import LabelEncoder
 
 import torch.nn as nn
 
-
-
 class DeepClassifier(nn.Module):
     def __init__(self, input_shape, hidden_sizes, num_classes) -> None:
         super().__init__()
@@ -57,76 +55,7 @@ class DeepClassifier(nn.Module):
         for l, b in zip(self.lin_hid, self.bn):
             y = self.non_linearity(b(l(y)))         
         y = self.soft_max(self.lin_out(y))
-        return y
-    
-class Deep3DConvFront2x2(nn.Module):
-    def __init__(self, input_shape, out_channels, hidden_sizes, num_classes) -> None:
-        super().__init__()
-        self.cnn_front = nn.Conv3d(in_channels=input_shape[0], out_channels=out_channels, kernel_size=2, stride=1)
-        self.bn = nn.BatchNorm3d(out_channels)
-        self.max_pool = nn.MaxPool3d(kernel_size=2, stride=1)
-        self.flatten = nn.Flatten(start_dim=1)
-        self.flat_out = (input_shape[1] - 2)*(input_shape[2] - 2)*(input_shape[3] - 2) * out_channels
-        self.skip_flat_out = input_shape[0]*input_shape[1]*input_shape[2]*input_shape[3]
-        self.clf = DeepClassifier(self.skip_flat_out + self.flat_out, hidden_sizes, num_classes)
-        
-    def forward(self, x):
-        y = self.cnn_front(x)
-        y = self.bn(y)
-        y = self.max_pool(y)
-        y = torch.cat((self.flatten(x), self.flatten(y)), dim=1)
-        return self.clf(y)
-    
-class BalancedDataLoader:
-    def __init__(self, X: torch.Tensor, y: torch.Tensor, n, sigma = 0.0, to_one_hot = False) -> None:
-        self.X = X
-        self.y = y
-        self.labels, self.label_counts = torch.unique(y, return_counts=True)
-        self.largest_class = torch.max(self.label_counts)
-        self.n_classes = self.labels.shape[0]
-        self.labels = self.labels.tolist()
-        self.idx_counter = 0
-        self.X_dict = {}
-        self.idx_dict = {}
-        self.n = n #number of elements of each class in each batch
-        self.batch_size = n * self.n_classes
-        self.to_one_hot = to_one_hot
-        self.sigma = sigma
-        for l in self.labels:
-            self.X_dict[l] = X[self.y == l, ...]
-        
-        
-    def _shuffle(self):
-        for l, c in zip(self.labels, self.label_counts):
-            self.idx_dict[l] = torch.randperm(c)
-        
-    def __iter__(self):        
-        return self
-    
-    def __next__(self):
-        #shuffle at the start of each iteration
-        if self.idx_counter == 0: self._shuffle()
-        #stop only when the largest class has finished sampling
-        if self.idx_counter < self.largest_class:             
-            #sample from each class, wrapping if required
-            batch_x = torch.zeros((self.batch_size, *self.X.shape[1:]), dtype=self.X.dtype)
-            batch_y = torch.zeros((self.batch_size, n_classes if self.to_one_hot else 1), dtype=self.y.dtype)
-            batch_idx = 0
-            for i in range(self.n):
-                for l, c in zip(self.labels, self.label_counts):
-                    iw = (i + self.idx_counter) % c
-                    batch_x[batch_idx, ...] = self.X_dict[l][self.idx_dict[l][iw], ...]
-                    batch_x[batch_idx, ...] += torch.randn_like(batch_x[batch_idx, ...]) * self.sigma
-                    batch_y[batch_idx, ...] = nn.functional.one_hot(torch.Tensor([l], device='cpu').type(torch.int64), num_classes=self.n_classes).to(batch_y.device) if self.to_one_hot else l
-                    batch_idx += 1
-            
-                
-            self.idx_counter += self.n
-            return batch_x, batch_y
-    
-        self.idx_counter = 0
-        raise StopIteration
-        
+        return y     
         
         
     
@@ -156,10 +85,8 @@ class LinearTrainer:
         
         X_val = X_val.cuda()
         y_val = nn.functional.one_hot(y_val).type(torch.float32).cuda() if n_classes > 2 else y_val.type(torch.float32).cuda()
-        # print(X_train.device, X_test.device, y_train.device, y_test.device)
         generator = torch.Generator(device='cuda')
         self.batch_size = 256
-        # self.loader = BalancedDataLoader(X_train, y_train, 32, 0.2, n_classes>2)
         self.loader = DataLoader(TensorDataset(X_train, y_train), batch_size=self.batch_size, generator=generator, shuffle=True)
         optim = torch.optim.Adam(params=self.model.parameters(), lr = lr)
         loss_fn = nn.CrossEntropyLoss(weight=y_train_weights) if n_classes > 2 else nn.BCELoss()
@@ -247,12 +174,6 @@ from sklearn.preprocessing import normalize
 
 torch.cuda.empty_cache()
 from kymatio.torch import Scattering2D
-
-
-
-
-
-
 
 d = [4]*2
 print(d)

@@ -37,42 +37,7 @@ class DeepClassifier(nn.Module):
         y = self.soft_max(self.lin_out(y))
         return y
     
-class Deep3DConvFront2x2(nn.Module):
-    def __init__(self, input_shape, out_channels, hidden_sizes, num_classes) -> None:
-        super().__init__()
-        self.cnn_front = nn.Conv3d(in_channels=input_shape[0], out_channels=out_channels, kernel_size=2, stride=1)
-        self.bn = nn.BatchNorm3d(out_channels)
-        self.max_pool = nn.MaxPool3d(kernel_size=2, stride=1)
-        self.flatten = nn.Flatten(start_dim=1)
-        self.flat_out = (input_shape[1] - 2)*(input_shape[2] - 2)*(input_shape[3] - 2) * out_channels
-        self.skip_flat_out = input_shape[0]*input_shape[1]*input_shape[2]*input_shape[3]
-        self.clf = DeepClassifier(self.skip_flat_out + self.flat_out, hidden_sizes, num_classes)
-        
-    def forward(self, x):
-        y = self.cnn_front(x)
-        y = self.bn(y)
-        y = self.max_pool(y)
-        y = torch.cat((self.flatten(x), self.flatten(y)), dim=1)
-        return self.clf(y)
-    
-class BalancedDataLoader:
-    def __init__(self, X: torch.Tensor, y: torch.Tensor, n, sigma = 0.0, to_one_hot = False) -> None:
-        self.X = X
-        self.y = y
-        self.labels, self.label_counts = torch.unique(y, return_counts=True)
-        self.largest_class = torch.max(self.label_counts)
-        self.n_classes = self.labels.shape[0]
-        self.labels = self.labels.tolist()
-        self.idx_counter = 0
-        self.X_dict = {}
-        self.idx_dict = {}
-        self.n = n #number of elements of each class in each batch
-        self.batch_size = n * self.n_classes
-        self.to_one_hot = to_one_hot
-        self.sigma = sigma
-        for l in self.labels:
-            self.X_dict[l] = X[self.y == l, ...]
-        
+      
         
     def _shuffle(self):
         for l, c in zip(self.labels, self.label_counts):
@@ -134,10 +99,8 @@ class LinearTrainer:
         
         X_val = X_val.cuda()
         y_val = nn.functional.one_hot(y_val).type(torch.float32).cuda() if n_classes > 2 else y_val.type(torch.float32).cuda()
-        # print(X_train.device, X_test.device, y_train.device, y_test.device)
         generator = torch.Generator(device='cuda')
         self.batch_size = 256
-        # self.loader = BalancedDataLoader(X_train, y_train, 32, 0.2, n_classes>2)
         self.loader = DataLoader(TensorDataset(X_train, y_train), batch_size=self.batch_size, generator=generator, shuffle=True)
         optim = torch.optim.Adam(params=self.model.parameters(), lr = lr)
         loss_fn = nn.CrossEntropyLoss(weight=y_train_weights) if n_classes > 2 else nn.BCELoss()
@@ -244,52 +207,13 @@ for d in DATASETS:
     X_train = torch.reshape(X_train, (X_train.shape[0], -1))    
     X_test = torch.reshape(X_test, (X_test.shape[0], -1))  
     X_val = torch.reshape(X_val, (X_val.shape[0], -1)) 
-     
-    # X_train = torch.log(abs(X_train) + 1e-12)
-    # X_test = torch.log(abs(X_test) + 1e-12)
-    # X_val = torch.log(abs(X_val) + 1e-12)
-    # X_train = torch.swapaxes(X_train, 1, -1)   
-    # X_test = torch.swapaxes(X_test, 1, -1)  
-    # X_val = torch.swapaxes(X_val, 1, -1)    
     
-    # X_train = torch.mean(X_train, dim=(1,2,3))    
-    # X_test = torch.mean(X_test, dim=(1,2,3))  
-    # X_val = torch.mean(X_val, dim=(1,2,3))  
     n_classes = len(torch.unique(y_train)) 
     print(f'{n_classes=}') 
     
-
-
-    # X_train = X_train / torch.max(X_train, dim=1, keepdim=True)[0]
-    # X_test = X_test / torch.max(X_test, dim=1, keepdim=True)[0]
-    # X_val = X_val / torch.max(X_val, dim=1, keepdim=True)[0]
-
     mu = torch.mean(X_train, axis=0)
     std = torch.std(X_train, axis=0)
-    print(torch.any(std < 1e-12))
-
-    # X_train = (X_train - mu)/std
-    # X_test = (X_test - mu)/std
-    # X_val = (X_val - mu)/std
-    
-        
-    # if EN_LDA_DR:
-    #     lda = LDA(priors=[1/n_classes for _ in range(n_classes)])
-    #     X_train = lda.fit_transform(X_train, y_train)
-    #     X_test = lda.transform(X_test)
-        
-    # clf = SVC(verbose=False, probability=True)
-
-    # clf.fit(X_train, y_train)
-    # y_pred = clf.predict(X_test)
-    # y_prob = clf.predict_proba(X_test) if n_classes > 2 else clf.predict_proba(X_test)[:, 1]
-
-
-    # print(
-    #     f"Classification report for classifier {clf}:\n"
-    #     f"{metrics.classification_report(y_test, y_pred, digits=3)}\n"
-    #     f"AUC={metrics.roc_auc_score(y_test, y_prob, multi_class='ovo')}"
-    # )
+    print(torch.any(std < 1e-12))    
     
     print(X_train.shape)
     net = DeepClassifier(X_train.shape[1],[1024, 512, 256], n_classes)
