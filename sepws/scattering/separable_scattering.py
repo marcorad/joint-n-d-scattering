@@ -76,8 +76,8 @@ class SeparableScattering:
             sigma_phi_w = calculate_sigma_phi_w(self.d[i], self.Q[level][i])
             beta = cfg.get_beta(self.Q[level][i])
             #take into account the linearly spaced filter bandwidths as well
-            sigma_psi_w_filt = max(sigma_psi_w * abs(lambda_filt[i]), sigma_phi_w)
-            sigma_psi_w_demod = max(sigma_psi_w * abs(lambda_demod[i]), sigma_phi_w)
+            sigma_psi_w_filt = max(calculate_sigma_psi_w(self.Q[level][i]) * abs(lambda_filt[i]), calculate_sigma_phi_w(self.d[i], self.Q[level][i]))
+            sigma_psi_w_demod = max(calculate_sigma_psi_w(self.Q[level-1][i]) * abs(lambda_demod[i]), calculate_sigma_phi_w(self.d[i], self.Q[level-1][i]))
             # prune only when demodulated filter's bandwith is not at least within beta standard deviations of the current filter
             # note that we use the abs value of the lambdas since lambdas can be positive or negative
             # |----------*----------|
@@ -88,7 +88,7 @@ class SeparableScattering:
             # these intervals must overlap, 
             # * is the centre of the spectrum, d is the significant bandwidth of the demodulated filter (via modulus), and f is the morlet filter under consideration which has a center x
             EPS = 1e-9 #for floating point error
-            if abs(lambda_filt[i]) > beta*sigma_psi_w_demod + EPS: return True 
+            if beta*sigma_psi_w_demod < abs(lambda_filt[i]) + EPS: return True 
             # if abs(lambda_filt[i]) > abs(lambda_demod[i]): return True 
             bws.append(abs(lambda_filt[i]) - sigma_psi_w_filt > sigma_psi_w_demod)           
         return False
