@@ -23,6 +23,7 @@ cfg.set_alpha(1, 2.5)
 import numpy as np
 from sklearn.svm import SVC
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn import metrics
 import pickle as pkl
 from sklearn import metrics
 import torch
@@ -175,10 +176,14 @@ from sklearn.preprocessing import normalize
 torch.cuda.empty_cache()
 from kymatio.torch import Scattering2D
 
-d = [4]*2
+d = [8]*2
 print(d)
 
-ws = SeparableScattering([28, 28], d, [[1, 1]])
+cfg.set_alpha(1,    2.5, False)
+cfg.set_alpha(1,    2.5, True)
+cfg.set_beta(1,     2.5)
+
+ws = SeparableScattering([28, 28], d, [[1,1], [1,1]])
 
 
 from sklearn import datasets, metrics, svm
@@ -187,11 +192,14 @@ from sklearn.discriminant_analysis import LinearDiscriminantAnalysis, QuadraticD
 from sklearn.model_selection import train_test_split
 
 from mnist import MNIST
+
+N_train = 60000
+
 mndata = MNIST('../python-mnist/data') #requires the python-mnist repo (https://pypi.org/project/python-mnist/) to be in the same directory as this repo
 X_train, y_train = mndata.load_training()
 X_test, y_test = mndata.load_testing()
-X_train = torch.from_numpy(np.array(X_train).reshape((-1, 28, 28))).type(cfg.REAL_DTYPE)
-y_train = np.array(y_train)
+X_train = torch.from_numpy(np.array(X_train).reshape((-1, 28, 28))).type(cfg.REAL_DTYPE)[0:N_train, :, :]
+y_train = np.array(y_train)[0:N_train]
 X_test = torch.from_numpy(np.array(X_test).reshape((-1, 28, 28))).type(cfg.REAL_DTYPE)
 y_test = np.array(y_test)
 
@@ -204,6 +212,9 @@ S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm).cpu()
 S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm).cpu()
 torch.cuda.synchronize()
 t1 = time()
+
+S_train_sep = torch.log(S_train_sep)
+S_test_sep = torch.log(S_test_sep)
 print("Sep Scattering took {:.2f} ms".format((t1 - t0)*1000))
 print(S_train_sep.shape)
 
@@ -218,16 +229,27 @@ t1 = time()
 print("2D Scattering took {:.2f} ms".format((t1 - t0)*1000))
 S_train_2d = S_train_2d.swapaxes(1, -1)
 S_test_2d = S_test_2d.swapaxes(1, -1)
+S_train_2d = torch.log(S_train_2d)
+S_test_2d = torch.log(S_test_2d)
+
 print(S_train_2d.shape)
 print('2D DEVICE', S_test_2d.device)
 
-Nval = 5000
+Nval = 0
+
+# exit()
 
 # #flatten
 S_train_sep = S_train_sep.reshape(S_train_sep.shape[0], np.prod(S_train_sep.shape[1:]))
 S_val_sep = S_train_sep[0:Nval, ...]
 S_train_sep = S_train_sep[Nval:, ...]
 S_test_sep = S_test_sep.reshape(S_test_sep.shape[0], np.prod(S_test_sep.shape[1:]))
+
+# mu = torch.mean(S_train_sep, dim=0)
+# std = torch.std(S_train_sep, dim=0)
+# S_train_sep = (S_train_sep - mu)/std
+# S_val_sep = (S_val_sep - mu)/std
+# S_test_sep = (S_test_sep - mu)/std
 
 S_train_2d = S_train_2d.reshape(S_train_2d.shape[0], np.prod(S_train_2d.shape[1:]))
 S_val_2d = S_train_2d[0:Nval, ...]
@@ -238,6 +260,19 @@ y_val = torch.from_numpy(y_train[0:Nval])
 y_train = torch.from_numpy(y_train[Nval:])
 y_test = torch.from_numpy(y_test)
 
+
+lda = LDA(solver='eigen', shrinkage='auto')
+lda.fit(S_train_2d.cpu().numpy(), y_train.numpy())
+y_pred = lda.predict(S_test_2d.cpu().numpy())
+print('2D', metrics.accuracy_score(y_pred, y_test.numpy()))
+
+lda = LDA(solver='eigen', shrinkage='auto')
+lda.fit(S_train_sep.cpu().numpy(), y_train.numpy())
+y_pred = lda.predict(S_test_sep.cpu().numpy())
+print('Sep', metrics.accuracy_score(y_pred, y_test.numpy()))
+
+exit()
+
 print(S_train_sep.shape)
 print(S_train_2d.shape)
 
@@ -246,20 +281,20 @@ _2d_err = []
 
 for i in range(1):
 
-    net = DeepClassifier(S_train_sep.shape[1],[256, 128, 64], 10)
+    net = DeepClassifier(S_train_sep.shape[1],[128, 64, 32], 10)
     trainer = LinearTrainer(net)
     print("SEP PARAMETERS", trainer.num_trainable_parameters())
-    trainer.train(S_train_sep, y_train, S_val_sep, y_val, n_epochs=100, lr=3e-5)
+    trainer.train(S_train_sep, y_train, S_val_sep, y_val, n_epochs=100, lr=1e-4)
     acc, _ = trainer.test_acc(S_test_sep, y_test)
     err_prc = (1-acc)*100
     sep_err.append(err_prc.item())
     print(f'SEP Test Err: {err_prc: .2f}')
 
 
-    net = DeepClassifier(S_train_2d.shape[1],[256, 128, 64], 10)
+    net = DeepClassifier(S_train_2d.shape[1],[128, 64, 32], 10)
     trainer = LinearTrainer(net)
     print("2D PARAMETERS", trainer.num_trainable_parameters())
-    trainer.train(S_train_2d, y_train, S_val_2d, y_val, n_epochs=100, lr=3e-5)
+    trainer.train(S_train_2d, y_train, S_val_2d, y_val, n_epochs=100, lr=1e-4)
     acc, _ = trainer.test_acc(S_test_2d, y_test)
     err_prc = (1-acc)*100   
     _2d_err.append(err_prc.item())

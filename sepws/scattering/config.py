@@ -7,22 +7,31 @@ class Config:
     REAL_DTYPE: torch.dtype = torch.float32
     BETA_DEFAULT: float = 2.5
     ALPHA_DEFAULT: float = 2.5
+    ALPHA_DEFAULT_LIN: float = 2.5
     BETA_LUT: Dict[float, float] = {}
     ALPHA_LUT: Dict[float, float] = {}
+    ALPHA_LUT_LIN: Dict[float, float] = {}
     
     def set_beta(self, Q:float, beta: float):
         self.BETA_LUT[float(Q)] = beta
         
-    def set_alpha(self, Q: float, alpha: float):
-        self.ALPHA_LUT[float(Q)] = alpha
+    def set_alpha(self, Q: float, alpha: float, is_linear: bool = False):
+        if is_linear: 
+            self.ALPHA_LUT_LIN[float(Q)] = alpha
+        else:
+            self.ALPHA_LUT[float(Q)] = alpha
         
     def get_beta(self, Q: float) -> float:
         if float(Q) in self.BETA_LUT.keys(): return self.BETA_LUT[float(Q)]
         return self.BETA_DEFAULT
     
-    def get_alpha(self, Q: float) -> float:
-        if float(Q) in self.ALPHA_LUT.keys(): return self.ALPHA_LUT[float(Q)]
-        return self.ALPHA_DEFAULT
+    def get_alpha(self, Q: float, is_linear: bool = False) -> float:
+        if is_linear:            
+            if float(Q) in self.ALPHA_LUT_LIN.keys(): return self.ALPHA_LUT_LIN[float(Q)]
+            return self.ALPHA_DEFAULT_LIN
+        else:
+            if float(Q) in self.ALPHA_LUT.keys(): return self.ALPHA_LUT[float(Q)]
+            return self.ALPHA_DEFAULT
     
     def cuda(self):
         self.DEVICE = torch.device('cuda')

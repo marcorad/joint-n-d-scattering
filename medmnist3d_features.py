@@ -54,8 +54,8 @@ def augment_train(X, y, tot_examples_in_each_class, keep_prop = True):
         
     
 
-Q = [[2]*3]
-d = [4]*3
+Q = [[1], [1], [1]]
+d = [8]*3
 N = [28, 28, 28]
 AUG = False
 

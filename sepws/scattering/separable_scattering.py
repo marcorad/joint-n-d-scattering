@@ -1,6 +1,6 @@
 from .config import cfg
 from .torch_backend import TorchBackend
-from .filterbank import scattering_filterbanks, get_Lambda_set, get_wavelet_filter, filterbank_to_tensor, calculate_padding_1d, get_output_downsample_factor, calculate_sigma_psi_w, calculate_sigma_phi_w
+from .filterbank import scattering_filterbank_separable, get_Lambda_set, get_wavelet_filter, filterbank_to_tensor, calculate_padding_1d, get_output_downsample_factor, calculate_sigma_psi_w, calculate_sigma_phi_w
 from typing import List, Tuple, Dict
 from torch import Tensor
 
@@ -21,7 +21,7 @@ class SeparableScattering:
         self.Ndim = len(N)
         self.d = d
         self.Q = Q
-        self.Nlevels = len(Q)
+        self.Nlevels = len(Q[0])
         self.allow_ds = allow_ds
         assert self.Nlevels <= 3, f'Requested {self.Nlevels} scattering levels. A maximum of 3 levels is supported. More than 3 levels are typically not useful.'
         assert all([d[i] <= N[i] for i in range(self.Ndim)]), f'All invariance scales {d} must be <= the signal support {N}.'
@@ -31,15 +31,15 @@ class SeparableScattering:
             self.Npad.append(n)
         self.Npad.reverse()
             
-        self.fb = scattering_filterbanks(self.Npad, d, Q, startfreq, allow_ds)
+        self.fb = scattering_filterbank_separable(self.Npad, d, Q, startfreq, allow_ds)
         filterbank_to_tensor(self.fb)
         
     def _mul_and_downsample(self, X: Tensor, level: int, input_ds: List[int], lambdas: List[float]):        
         mul1d = lambda x, y, dim: self.backend.mul1d(x, y, dim+1) #+1 to account for batch dim
         freqds = lambda x, d, dim: self.backend.freq_downsample1d(x, d, dim+1)
         for dim in range(self.Ndim):
-            filter = get_wavelet_filter(self.fb, level, dim, input_ds[dim], lambdas[dim])  
-            ds = get_output_downsample_factor(self.fb, level, dim, input_ds[dim], lambdas[dim])
+            filter = get_wavelet_filter(self.fb, dim, level, input_ds[dim], lambdas[dim])  
+            ds = get_output_downsample_factor(self.fb, dim, level, input_ds[dim], lambdas[dim])
             X = mul1d(X, filter, dim)
             if self.allow_ds: X = freqds(X, ds, dim)
         return X
@@ -49,8 +49,8 @@ class SeparableScattering:
         freqds = lambda x, d, dim: self.backend.freq_downsample1d(x, d, dim+1)
         ifft1d = lambda x, dim: self.backend.ifft1d(x, dim)
         for dim in range(self.Ndim):
-            filter = get_wavelet_filter(self.fb, level, dim, input_ds[dim], lambdas[dim])  
-            ds = get_output_downsample_factor(self.fb, level, dim, input_ds[dim], lambdas[dim])
+            filter = get_wavelet_filter(self.fb, dim, level, input_ds[dim], lambdas[dim])  
+            ds = get_output_downsample_factor(self.fb, dim, level, input_ds[dim], lambdas[dim])
             X = mul1d(X, filter, dim)
             if self.allow_ds: X = freqds(X, ds, dim)
             X = ifft1d(X, dim)
@@ -66,31 +66,25 @@ class SeparableScattering:
     
     def _get_compounded_downsample_factor(self, level, current_ds, lambdas):
         if self.allow_ds:
-            return [get_output_downsample_factor(self.fb, level, dim, current_ds[dim], lambdas[dim]) * current_ds[dim] for dim in range(self.Ndim)]
+            return [get_output_downsample_factor(self.fb, dim, level, current_ds[dim], lambdas[dim]) * current_ds[dim] for dim in range(self.Ndim)]
         return [1 for _ in range(self.Ndim)]
     
     def _should_prune(self, lambda_filt: List[float], lambda_demod: List[float], level: int):
-        bws = []
-        for i in range(self.Ndim):
-            sigma_psi_w = calculate_sigma_psi_w(self.Q[level][i])
-            sigma_phi_w = calculate_sigma_phi_w(self.d[i], self.Q[level][i])
-            beta = cfg.get_beta(self.Q[level][i])
-            #take into account the linearly spaced filter bandwidths as well
-            sigma_psi_w_filt = max(sigma_psi_w * abs(lambda_filt[i]), sigma_phi_w)
-            sigma_psi_w_demod = max(sigma_psi_w * abs(lambda_demod[i]), sigma_phi_w)
-            # prune only when demodulated filter's bandwith is not at least within beta standard deviations of the current filter
+        for dim, (lf, ld) in enumerate(zip(lambda_filt, lambda_demod)):
+            beta = cfg.get_beta(self.Q[dim][level])
+            sigma_psi_w_demod = max(calculate_sigma_psi_w(self.Q[dim][level-1]) * abs(ld), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
+            sigma_psi_w_filt = max(calculate_sigma_psi_w(self.Q[dim][level-1]) * abs(lf), calculate_sigma_phi_w(self.d[dim], self.Q[dim][level-1]))
+            # prune only when demodulated filter's centre freq is not at least within beta standard deviations of the current filter
             # note that we use the abs value of the lambdas since lambdas can be positive or negative
             # |----------*----------|
             # |-----ddddd*ddddd-----|
             #            <---->          
-            # |----------*--ffxff---|
+            # |----------*----x-----|
             #               <->       
             # these intervals must overlap, 
             # * is the centre of the spectrum, d is the significant bandwidth of the demodulated filter (via modulus), and f is the morlet filter under consideration which has a center x
             EPS = 1e-9 #for floating point error
-            if abs(lambda_filt[i]) > beta*sigma_psi_w_demod + EPS: return True 
-            # if abs(lambda_filt[i]) > abs(lambda_demod[i]): return True 
-            bws.append(abs(lambda_filt[i]) - sigma_psi_w_filt > sigma_psi_w_demod)           
+            if beta*sigma_psi_w_demod < abs(lf) - sigma_psi_w_filt * beta + EPS: return True 
         return False
     
     def scattering(self, x: Tensor, normalise = False) -> Tensor:
@@ -137,18 +131,7 @@ class SeparableScattering:
                     'psi_ds': l1_compounded_ds,
                     'phi_ds': l2_compounded_ds
                 })              
-                if self.Nlevels == 2: continue                
-                #third level
-                Lambda_3 = get_Lambda_set(self.fb, 2, l2_compounded_ds)
-                for lambda3 in Lambda_3:    
-                    if self._should_prune(lambda3, lambda2, 2): continue #prune the paths 
-                    l3_compounded_ds = self._get_compounded_downsample_factor(2, l2_compounded_ds, lambda3)
-                    paths.append({
-                    'level': 3,
-                    'lambda': (lambda1, lambda2, lambda3),
-                    'psi_ds': l2_compounded_ds,
-                    'phi_ds': l3_compounded_ds
-                })                                                        
+                                                                       
         return paths
     
     def _normalise(self, x1: Tensor, xn: Tensor):
@@ -187,6 +170,7 @@ class SeparableScattering:
         for lambda1 in Lambda_1:            
             u_1 = modulus(ifft(mulds(X, 0, l0_compounded_ds, lambda1)))
             U_1 = fft(u_1)
+            del u_1
             l1_compounded_ds = self._get_compounded_downsample_factor(0, l0_compounded_ds, lambda1)
             s_1 = ifft(mulds(U_1, 0, l1_compounded_ds, lambda_zero)).real
             s_1 = unpad(s_1)
@@ -205,6 +189,7 @@ class SeparableScattering:
                 # print(f'\t{lambda2}')
                 u_2 = modulus(ifft(mulds(U_1, 1, l1_compounded_ds, lambda2)))
                 U_2 = fft(u_2)
+                del u_2
                 l2_compounded_ds = self._get_compounded_downsample_factor(1, l1_compounded_ds, lambda2)
                 s_2 = unpad(ifft(mulds(U_2, 1, l2_compounded_ds, lambda_zero)).real)
                 if normalise: s_2 = self._normalise(s_2, s_1)
@@ -212,22 +197,10 @@ class SeparableScattering:
                 
                 if returnU:     Up[(lambda1, lambda2)] = u_2
                 if returnSpath: Sp[(lambda1, lambda2)] = s_2
+                del U_2
+            del U_1
+            
                 
-                if self.Nlevels == 2: continue
-                
-                #third level
-                Lambda_3 = get_Lambda_set(self.fb, 2, l2_compounded_ds)
-                for lambda3 in Lambda_3:    
-                    if self._should_prune(lambda3, lambda2, 2): continue #prune the paths
-                    u_3 = modulus(ifft(mulds(U_2, 2, l2_compounded_ds, lambda3)))
-                    U_3 = fft(u_3)
-                    l3_compounded_ds = self._get_compounded_downsample_factor(2, l2_compounded_ds, lambda3)
-                    s_3 = unpad(ifft(mulds(U_3, 2, l3_compounded_ds, lambda_zero)).real)
-                    if normalise: s_3 = self._normalise(s_3, s_2)
-                    S.append(s_3) 
-                    
-                    if returnU:     Up[(lambda1, lambda2, lambda3)] = u_3
-                    if returnSpath: Sp[(lambda1, lambda2, lambda3)] = s_3
                     
         return S, Sp, Up, x
         

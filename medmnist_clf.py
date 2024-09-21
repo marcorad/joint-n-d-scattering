@@ -1,10 +1,12 @@
 import numpy as np
 from sklearn.svm import SVC
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+from sklearn import metrics
 import pickle as pkl
 from sklearn import metrics
 import torch
 from sepws.dataprocessing.medmnist3d import DATASETS
+from sklearn.preprocessing import MultiLabelBinarizer
 
 import torch
 
@@ -234,7 +236,7 @@ for d in DATASETS:
         f"{d}\n"
         "---------\n"
     )
-    fname = f'data/ws-{d}-mnist3d-Q=[[2, 2, 2]].pkl' #run medmnist3d_features.py before running this
+    fname = f'data/ws-{d}-mnist3d-Q=[[1], [1], [1]].pkl' #run medmnist3d_features.py before running this
     with open(fname, 'rb') as file:
         X_train, y_train, X_test, y_test, X_val, y_val = pkl.load(file)
         y_train = torch.from_numpy(y_train.astype(np.float32))
@@ -264,9 +266,9 @@ for d in DATASETS:
     # X_test = X_test / torch.max(X_test, dim=1, keepdim=True)[0]
     # X_val = X_val / torch.max(X_val, dim=1, keepdim=True)[0]
 
-    mu = torch.mean(X_train, axis=0)
-    std = torch.std(X_train, axis=0)
-    print(torch.any(std < 1e-12))
+    # mu = torch.mean(X_train, axis=0)
+    # std = torch.std(X_train, axis=0)
+    # print(torch.any(std < 1e-12))
 
     # X_train = (X_train - mu)/std
     # X_test = (X_test - mu)/std
@@ -292,13 +294,22 @@ for d in DATASETS:
     # )
     
     print(X_train.shape)
-    net = DeepClassifier(X_train.shape[1],[1024, 512, 256], n_classes)
+    net = DeepClassifier(X_train.shape[1],[256, 256, 64], n_classes)
     trainer = LinearTrainer(net)
     print(trainer.num_trainable_parameters())
     trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-5)
     acc, auc = trainer.test_acc(X_test, y_test)
     results[d] = {'acc': acc.item(), 'auc': auc, 'n_classes': n_classes}
     print(f'Test Accuracy: {acc: .3f}, AUC: {auc: .3f}')
+    
+    lda = LDA(solver='eigen', shrinkage='auto')
+    lda.fit(X_train.cpu().numpy(), y_train.cpu().numpy())
+    y_pred = lda.predict(X_test.cpu().numpy())
+    y_prob = lda.predict_proba(X_test.cpu().numpy())
+    
+    y_oh = np.zeros_like(y_prob)
+    y_oh[np.arange(y_oh.shape[0]), y_test.type(torch.int32).numpy()] = 1
+    print(d, metrics.accuracy_score(y_test.numpy(), y_pred), metrics.roc_auc_score(y_oh, y_prob))
   
   
 import pprint    
