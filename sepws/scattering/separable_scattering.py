@@ -84,7 +84,7 @@ class SeparableScattering:
             # these intervals must overlap, 
             # * is the centre of the spectrum, d is the significant bandwidth of the demodulated filter (via modulus), and f is the morlet filter under consideration which has a center x
             EPS = 1e-9 #for floating point error
-            if beta*sigma_psi_w_demod < abs(lf) - sigma_psi_w_filt * beta + EPS: return True 
+            if beta*sigma_psi_w_demod < abs(lf) - sigma_psi_w_filt * beta + EPS: return True
         return False
     
     def scattering(self, x: Tensor, normalise = False) -> Tensor:
