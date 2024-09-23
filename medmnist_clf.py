@@ -30,7 +30,7 @@ class DeepClassifier(nn.Module):
             self.bn.append(nn.BatchNorm1d(hidden_sizes[i+1]))
         self.lin_out = nn.Linear(hidden_sizes[-1], num_classes) if num_classes > 2 else nn.Linear(hidden_sizes[-1], 1)
         self.soft_max = nn.Softmax(dim=1) if num_classes > 2 else nn.Sigmoid()
-        self.non_linearity = nn.ReLU()
+        self.non_linearity = nn.Tanh()
         
     def forward(self, x):
         y = self.non_linearity(self.bn_in(self.lin_in(x)))
@@ -39,23 +39,6 @@ class DeepClassifier(nn.Module):
         y = self.soft_max(self.lin_out(y))
         return y
     
-class Deep3DConvFront2x2(nn.Module):
-    def __init__(self, input_shape, out_channels, hidden_sizes, num_classes) -> None:
-        super().__init__()
-        self.cnn_front = nn.Conv3d(in_channels=input_shape[0], out_channels=out_channels, kernel_size=2, stride=1)
-        self.bn = nn.BatchNorm3d(out_channels)
-        self.max_pool = nn.MaxPool3d(kernel_size=2, stride=1)
-        self.flatten = nn.Flatten(start_dim=1)
-        self.flat_out = (input_shape[1] - 2)*(input_shape[2] - 2)*(input_shape[3] - 2) * out_channels
-        self.skip_flat_out = input_shape[0]*input_shape[1]*input_shape[2]*input_shape[3]
-        self.clf = DeepClassifier(self.skip_flat_out + self.flat_out, hidden_sizes, num_classes)
-        
-    def forward(self, x):
-        y = self.cnn_front(x)
-        y = self.bn(y)
-        y = self.max_pool(y)
-        y = torch.cat((self.flatten(x), self.flatten(y)), dim=1)
-        return self.clf(y)
     
 class BalancedDataLoader:
     def __init__(self, X: torch.Tensor, y: torch.Tensor, n, sigma = 0.0, to_one_hot = False) -> None:
@@ -294,7 +277,7 @@ for d in DATASETS:
     # )
     
     print(X_train.shape)
-    net = DeepClassifier(X_train.shape[1],[256, 256, 64], n_classes)
+    net = DeepClassifier(X_train.shape[1],[128, 64, 32], n_classes)
     trainer = LinearTrainer(net)
     print(trainer.num_trainable_parameters())
     trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-5)

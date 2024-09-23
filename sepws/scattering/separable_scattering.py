@@ -3,10 +3,12 @@ from .torch_backend import TorchBackend
 from .filterbank import scattering_filterbank_separable, get_Lambda_set, get_wavelet_filter, filterbank_to_tensor, calculate_padding_1d, get_output_downsample_factor, calculate_sigma_psi_w, calculate_sigma_phi_w
 from typing import List, Tuple, Dict
 from torch import Tensor
+import torch
+
 
 class SeparableScattering:
     backend: TorchBackend = TorchBackend()
-    def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds = True) -> None:
+    def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds: List[bool] = None) -> None:
         """Create a separable scattering object, which precalculates the filters.
 
         Args:
@@ -22,6 +24,7 @@ class SeparableScattering:
         self.d = d
         self.Q = Q
         self.Nlevels = len(Q[0])
+        if allow_ds == None: allow_ds = [True for _ in range(self.Ndim)]
         self.allow_ds = allow_ds
         assert self.Nlevels <= 3, f'Requested {self.Nlevels} scattering levels. A maximum of 3 levels is supported. More than 3 levels are typically not useful.'
         assert all([d[i] <= N[i] for i in range(self.Ndim)]), f'All invariance scales {d} must be <= the signal support {N}.'
@@ -41,7 +44,7 @@ class SeparableScattering:
             filter = get_wavelet_filter(self.fb, dim, level, input_ds[dim], lambdas[dim])  
             ds = get_output_downsample_factor(self.fb, dim, level, input_ds[dim], lambdas[dim])
             X = mul1d(X, filter, dim)
-            if self.allow_ds: X = freqds(X, ds, dim)
+            if self.allow_ds[dim]: X = freqds(X, ds, dim)
         return X
     
     def _ifft_mul_and_downsample(self, X: Tensor, level: int, input_ds: List[int], lambdas: List[float]):
@@ -52,7 +55,7 @@ class SeparableScattering:
             filter = get_wavelet_filter(self.fb, dim, level, input_ds[dim], lambdas[dim])  
             ds = get_output_downsample_factor(self.fb, dim, level, input_ds[dim], lambdas[dim])
             X = mul1d(X, filter, dim)
-            if self.allow_ds: X = freqds(X, ds, dim)
+            if self.allow_ds[dim]: X = freqds(X, ds, dim)
             X = ifft1d(X, dim)
         return X
     
@@ -65,9 +68,10 @@ class SeparableScattering:
         return self.backend.fft(X, dims)
     
     def _get_compounded_downsample_factor(self, level, current_ds, lambdas):
-        if self.allow_ds:
-            return [get_output_downsample_factor(self.fb, dim, level, current_ds[dim], lambdas[dim]) * current_ds[dim] for dim in range(self.Ndim)]
-        return [1 for _ in range(self.Ndim)]
+        ds = [1 for _ in range(self.Ndim)]
+        for dim in range(self.Ndim):
+            if self.allow_ds[dim]: ds[dim] = get_output_downsample_factor(self.fb, dim, level, current_ds[dim], lambdas[dim]) * current_ds[dim]
+        return ds
     
     def _should_prune(self, lambda_filt: List[float], lambda_demod: List[float], level: int):
         for dim, (lf, ld) in enumerate(zip(lambda_filt, lambda_demod)):
@@ -84,7 +88,7 @@ class SeparableScattering:
             # these intervals must overlap, 
             # * is the centre of the spectrum, d is the significant bandwidth of the demodulated filter (via modulus), and f is the morlet filter under consideration which has a center x
             EPS = 1e-9 #for floating point error
-            if beta*sigma_psi_w_demod < abs(lf) - sigma_psi_w_filt * beta + EPS: return True
+            if cfg.get_beta_prune()*sigma_psi_w_demod < abs(lf): return True # - sigma_psi_w_filt * beta + EPS
         return False
     
     def scattering(self, x: Tensor, normalise = False) -> Tensor:
@@ -97,7 +101,7 @@ class SeparableScattering:
         Returns:
             Tensor: The scattering features, with the last axis corresponding to the various filters paths.
         """
-        S, _, _, _ = self._scattering(x, False, False, normalise)        
+        S, _, _ = self._scattering(x, False, False, normalise)        
         return self.backend.stack(S)
     
     def _calculate_paths(self):   #TODO: use for pre-calculating separable filters     
@@ -143,7 +147,8 @@ class SeparableScattering:
         # Kymatio's scattering has a near-identical implementation
           
         #function aliases for clarity        
-        unpad = lambda x: self.backend.unpad(x) if self.allow_ds else x #disable unpadding when DS occurs
+        #TODO: better unpadding
+        unpad = lambda x: self.backend.unpad(x) if all(self.allow_ds) else x #disable unpadding when DS occurs
         pad = lambda x, s: self.backend.pad(x, s)
         fft = lambda x: self._fft_all(x)
         ifft = lambda x: self._ifft_all(x)        
@@ -156,6 +161,7 @@ class SeparableScattering:
         #get the fft of the input signal across all dimensions
         lambda_zero = tuple([0 for _ in range(self.Ndim)]) #tuple of zeros for the LPF (phi)
         X = fft(x)
+        del x
         s_0 = unpad(ifft(mulds(X, 0, [1 for _ in range(self.Ndim)], lambda_zero)).real)
         S = [s_0]
         Up = {}
@@ -167,7 +173,9 @@ class SeparableScattering:
         
         #first level
         Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim)
-        for lambda1 in Lambda_1:            
+        for lambda1 in Lambda_1:   
+                    
+            torch.cuda.empty_cache()
             u_1 = modulus(ifft(mulds(X, 0, l0_compounded_ds, lambda1)))
             U_1 = fft(u_1)
             del u_1
@@ -202,7 +210,7 @@ class SeparableScattering:
             
                 
                     
-        return S, Sp, Up, x
+        return S, Sp, Up
         
         
         

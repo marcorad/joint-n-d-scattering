@@ -180,10 +180,12 @@ d = [8]*2
 print(d)
 
 cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    2.5, True)
+cfg.set_alpha(1,    1.8, True)
 cfg.set_beta(1,     2.5)
 
-ws = SeparableScattering([28, 28], d, [[1,1], [1,1]])
+Q = [[1,1], [1,1]]
+
+ws = SeparableScattering([28, 28], d, Q)
 
 
 from sklearn import datasets, metrics, svm
@@ -193,7 +195,7 @@ from sklearn.model_selection import train_test_split
 
 from mnist import MNIST
 
-N_train = 60000
+N_train = 40000
 
 mndata = MNIST('../python-mnist/data') #requires the python-mnist repo (https://pypi.org/project/python-mnist/) to be in the same directory as this repo
 X_train, y_train = mndata.load_training()
@@ -213,12 +215,15 @@ S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm).cpu()
 torch.cuda.synchronize()
 t1 = time()
 
+
 S_train_sep = torch.log(S_train_sep)
 S_test_sep = torch.log(S_test_sep)
 print("Sep Scattering took {:.2f} ms".format((t1 - t0)*1000))
 print(S_train_sep.shape)
+# exit()
 
-ws_2d = Scattering2D(J=3, shape=(28, 28), max_order=2)
+torch.cuda.empty_cache()
+ws_2d = Scattering2D(J=3, shape=(28, 28), max_order=len(Q[0]))
 ws_2d.cuda()
 
 t0 = time()

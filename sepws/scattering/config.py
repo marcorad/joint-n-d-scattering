@@ -7,13 +7,15 @@ class Config:
     REAL_DTYPE: torch.dtype = torch.float32
     BETA_DEFAULT: float = 2.5
     ALPHA_DEFAULT: float = 2.5
-    ALPHA_DEFAULT_LIN: float = 2.5
+    ALPHA_DEFAULT_LIN: float = 1.8
     BETA_LUT: Dict[float, float] = {}
     ALPHA_LUT: Dict[float, float] = {}
     ALPHA_LUT_LIN: Dict[float, float] = {}
+    BETA_PRUNE_DEFAULT = 1.5
+    BETA_PRUNE = BETA_PRUNE_DEFAULT
     
     def set_beta(self, Q:float, beta: float):
-        self.BETA_LUT[float(Q)] = beta
+        self.BETA_LUT[float(Q)] = beta        
         
     def set_alpha(self, Q: float, alpha: float, is_linear: bool = False):
         if is_linear: 
@@ -32,6 +34,12 @@ class Config:
         else:
             if float(Q) in self.ALPHA_LUT.keys(): return self.ALPHA_LUT[float(Q)]
             return self.ALPHA_DEFAULT
+        
+    def set_beta_prune(self, beta_prune):
+        self.BETA_PRUNE = beta_prune
+        
+    def get_beta_prune(self):
+        return self.BETA_PRUNE
     
     def cuda(self):
         self.DEVICE = torch.device('cuda')

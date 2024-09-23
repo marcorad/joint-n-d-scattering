@@ -4,7 +4,7 @@ import numpy as np
 from sepws.scattering.config import cfg
 
 cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    2.0, True)
+cfg.set_alpha(1,    1.8, True)
 cfg.set_beta(1,     2.5)
 
 N = [256, 256]
@@ -12,7 +12,7 @@ d = [8, 8]
 Npad = [filterbank.calculate_padding_1d(n, di)[2] for n, di in zip(N, d)]
 print(Npad)
 
-fb = filterbank.scattering_filterbank_separable(Npad, d, [[1], [1]], allow_ds=False)
+fb = filterbank.scattering_filterbank_separable(Npad, d, [[1], [1]], allow_ds=[False, False])
 lambdas = filterbank.get_Lambda_set(fb, 0, [1, 1])
 print(len(lambdas))
 for l in lambdas:
@@ -27,7 +27,7 @@ Y = np.linspace(-0.5, 0.5, Npad[0])
 s = np.zeros(Npad)
 
 
-c = 0.5
+c = 0.7
 
 for l in lambdas:
     psi0 = filterbank.get_wavelet_filter(fb, 0, 0, 1, l[0])

@@ -170,11 +170,12 @@ def _scattering_filterbanks_1d(N, d, Q: List[float], startfreq: float = None, al
         FB.append(fb)
     return FB
 
-def scattering_filterbank_separable(N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds = True):
+def scattering_filterbank_separable(N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds: List[bool] = None):
     if startfreq == None: startfreq = [None for _ in range(len(N))]
     FB = []
+    if allow_ds == None: allow_ds = [False for _ in range(len(N))]
     for i, (N_i, d_i, Q_i, startfreq_i) in enumerate(zip(N, d, Q, startfreq)):
-        FB.append(_scattering_filterbanks_1d(N_i, d_i, Q_i, startfreq_i, allow_ds, include_neg_lambdas=i>0)) #fb[dim][level][amount of input downsampling]['phi'/'psi'/'ds']<[lambda for 'psi']>
+        FB.append(_scattering_filterbanks_1d(N_i, d_i, Q_i, startfreq_i, allow_ds[i], include_neg_lambdas=i>0)) #fb[dim][level][amount of input downsampling]['phi'/'psi'/'ds']<[lambda for 'psi']>
     return FB
 
 def get_wavelet_filter(fb: List, dim: int, level: int, input_ds: int, lambda_: float): 

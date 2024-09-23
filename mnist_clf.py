@@ -16,8 +16,9 @@ from time import time
 from sepws.scattering.config import cfg
 
 cfg.cuda()
-cfg.set_beta(1, 2.5)
-cfg.set_alpha(1, 2.5)
+cfg.set_alpha(1,    2.5, False)
+cfg.set_alpha(1,    1.8, True)
+cfg.set_beta(1,     2.5)
 
 
 from sklearn.preprocessing import normalize
@@ -28,7 +29,7 @@ from kymatio.torch import Scattering2D
 
 TRAIN_SIZES = [1000,2000,5000,10000,20000,40000,60000]
 Q_CONFIGS = [
-    [[1, 1]],
+    [[1], [1]],
     [[1, 1], [1, 1]]
 ]
 
@@ -75,6 +76,7 @@ for iq, Q in enumerate(Q_CONFIGS):
     print("Sep Scattering took {:.2f} ms".format((t1 - t0)*1000))
     print(S_train_sep.shape)
     
+    torch.cuda.empty_cache()
     ws_2d = Scattering2D(J=3, shape=(28, 28), max_order=iq+1)
     ws_2d.cuda()
     
@@ -130,7 +132,7 @@ for iq, Q in enumerate(Q_CONFIGS):
         
         corr = np.corrcoef(S_train_sel.T)
         corr_t = np.abs(corr) > 0.9
-        print('SEP CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
+        # print('SEP CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
         clf = LinearDiscriminantAnalysis(solver='eigen', priors=[1/10]*10, shrinkage=0.005)
@@ -157,7 +159,7 @@ for iq, Q in enumerate(Q_CONFIGS):
         
         corr = np.corrcoef(S_train_sel.T)
         corr_t = np.abs(corr) > 0.95
-        print('2D CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
+        # print('2D CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
         clf = LinearDiscriminantAnalysis(solver='eigen', priors=[1/10]*10, shrinkage=0.005)
