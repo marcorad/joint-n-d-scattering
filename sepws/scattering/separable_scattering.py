@@ -4,6 +4,7 @@ from .filterbank import scattering_filterbank_separable, get_Lambda_set, get_wav
 from typing import List, Tuple, Dict
 from torch import Tensor
 import torch
+from math import ceil
 
 
 class SeparableScattering:
@@ -91,18 +92,28 @@ class SeparableScattering:
             if cfg.get_beta_prune()*sigma_psi_w_demod < abs(lf): return True # - sigma_psi_w_filt * beta + EPS
         return False
     
-    def scattering(self, x: Tensor, normalise = False) -> Tensor:
+    def scattering(self, x: Tensor, normalise = False, batch_size = None) -> Tensor:
         """Perform a separable scattering transform on a real signal x.
 
         Args:
             x (Tensor): A tensor with shape (Nbatch, ...), the dimensions from 1 onwards are the scattering dimensions.
             normalise (bool, optional): normalise scattering coefficients with respect to the previous level. Defaults to False.
+            batch_size (int, optional): compute scattering in batches for memory usage reduction. If None, computes all items in the batch dimension. Default to None.
 
         Returns:
             Tensor: The scattering features, with the last axis corresponding to the various filters paths.
         """
-        S, _, _ = self._scattering(x, False, False, normalise)        
-        return self.backend.stack(S)
+        N = x.shape[0]
+        if batch_size == None: batch_size = x.shape[0]
+        x = x.cpu()
+        S = []
+        for i in range(ceil(N / batch_size)):   
+            begin = i * batch_size
+            end = min((i+1)*batch_size, N)
+            x_b = x[begin:end, ...].to(cfg.DEVICE)        
+            s, _, _ = self._scattering(x_b, False, False, normalise) 
+            S.append(self.backend.stack(s, dim=1)) # stack all features into a single tensor              
+        return self.backend.concat(S, dim=0) # concat all batches
     
     def _calculate_paths(self):   #TODO: use for pre-calculating separable filters     
         paths = []                

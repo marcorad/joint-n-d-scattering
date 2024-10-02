@@ -7,8 +7,11 @@ class TorchBackend:
     def __init__(self) -> None:
         pass
     
-    def stack(self, x: List[Tensor]):
-        return torch.stack(x, dim=1)
+    def stack(self, x: List[Tensor], dim=1):
+        return torch.stack(x, dim=dim)
+    
+    def concat(self, x: List[Tensor], dim=0):
+        return torch.concatenate(x, dim=dim)
         
     def pad(self, x, sizes):
         """

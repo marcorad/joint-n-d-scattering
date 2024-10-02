@@ -8,7 +8,7 @@ cfg.set_alpha(1,    1.8, True)
 cfg.set_beta(1,     2.5)
 
 N = [256, 256]
-d = [8, 8]
+d = [4, 2]
 Npad = [filterbank.calculate_padding_1d(n, di)[2] for n, di in zip(N, d)]
 print(Npad)
 
@@ -35,17 +35,17 @@ for l in lambdas:
     psi = psi0[:, None] * psi1[None, :] # broadcast for getting wavelet
     s += psi**2
     print(np.max(psi))     
-    ax.contour(X, Y, np.fft.fftshift(psi), [c], colors='k')
+    ax.contour(X, Y, np.fft.fftshift(psi), [c], colors='k', linewidths=1.0)
     
     
 phi0 = filterbank.get_wavelet_filter(fb, 0, 0, 1, 0)
 phi1 = filterbank.get_wavelet_filter(fb, 1, 0, 1, 0)
 phi = phi0[:, None] * phi1[None, :] # broadcast for getting wavelet
-plt.contour(X, Y, np.fft.fftshift(phi), [c], colors='k', linestyles='dashed')
+plt.contour(X, Y, np.fft.fftshift(phi), [c], colors='k', linestyles='dashed', linewidths=1.0)
 
 ax.axvline(c='k', lw=1)
 ax.axhline(c='k', lw=1)
-# ax.axis('off')
+ax.axis('off')
     
 plt.ylim([-0.05, 0.5])
 
@@ -55,6 +55,9 @@ plt.ylim([-0.05, 0.5])
 
 # x, y = np.meshgrid(X, Y)
 # ax.plot_surface(x, y, np.fft.fftshift(s))
+
+ax.text(0.55, 0.0, '$\omega^{(1)}$', horizontalalignment='center', verticalalignment='center', parse_math=True)
+ax.text(0.0, 0.53, '$\omega^{(2)}$', horizontalalignment='center', verticalalignment='center', parse_math=True)
 
 plt.show()
     

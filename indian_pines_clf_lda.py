@@ -23,10 +23,10 @@ from tqdm import tqdm
 # print(np.unique(labels, return_counts=True))
 
 
-d_hyp_configs = [4, 8, 16, 32]
-Q_hyp_configs = [1, 1, 1, 1]
-d_im_configs =  [4, 4, 4, 4]
-Q_im_configs =  [1, 1, 1, 1]
+d_hyp_configs = [8, 16, 32]
+Q_hyp_configs = [1, 1, 1]
+d_im_configs =  [4, 4, 4]
+Q_im_configs =  [1, 1, 1]
 cfg.cuda()
 cfg.set_alpha(1,    2.5, False)
 cfg.set_alpha(1,    1.8, True)
@@ -46,6 +46,8 @@ for d_im, d_hyp, Q_im, Q_hyp in zip(d_im_configs, d_hyp_configs, Q_im_configs, Q
     labels = np.loadtxt(f'/home/marco/Repos/seperable-wavelet-scattering/indian-pines/labels.csv', delimiter=',')
 
     # print(X.shape, labels.shape)
+    
+    torch.cuda.empty_cache()
 
     sws = SeparableScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q_im], [Q_im], [Q_hyp]], allow_ds=[False, False, True])
     X = torch.from_numpy(X[None, :, :, :]).cuda()
@@ -122,18 +124,18 @@ for d_im, d_hyp, Q_im, Q_hyp in zip(d_im_configs, d_hyp_configs, Q_im_configs, Q
         acc.append(np.sum(y_pred == y_test) / len(y_pred))
         
     # print(acc)
-    err = 100-np.array(acc)*100
-    print('Randomised trials overall error rates (%) result')
-    print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q_im, Q_im, Q_hyp)}: {np.mean(err):.2f} +- {np.std(err):.2f} min {np.min(err):.2f} max {np.max(err):.2f}')
+    oa = np.array(acc)*100
+    print('Randomised trials overall accuracy (%) result')
+    print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q_im, Q_im, Q_hyp)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
     
     res += [{
         'Q': (Q_im, Q_im, Q_hyp),
         'd': (d_im, d_im, d_hyp),
-        'mean': np.mean(err),
-        'std': np.std(err),
-        'min': np.min(err),
-        'max': np.max(err),
-        'raw': err.tolist(),
+        'mean': np.mean(oa),
+        'std': np.std(oa),
+        'min': np.min(oa),
+        'max': np.max(oa),
+        'raw': oa.tolist(),
         'nfeat': X_train.shape[1]
     }]
     

@@ -39,6 +39,7 @@ for iq, Q in enumerate(Q_CONFIGS):
     d = [8]*2
     print(d)
 
+    torch.cuda.empty_cache()    
     ws = SeparableScattering([28, 28], d, Q)
 
 
@@ -69,7 +70,7 @@ for iq, Q in enumerate(Q_CONFIGS):
     #extract features with SWS
     norm = False
     t0 = time()
-    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm).cpu()
+    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm, batch_size=10000).cpu()
     S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm).cpu()
     torch.cuda.synchronize()
     t1 = time()
