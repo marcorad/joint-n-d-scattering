@@ -11,6 +11,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 from tqdm import tqdm
+from sklearn.svm import SVC
 
 
 
@@ -102,7 +103,7 @@ for d_im, d_hyp, Q_im, Q_hyp in zip(d_im_configs, d_hyp_configs, Q_im_configs, Q
     
 
     acc = []
-    Ntrails = 20
+    Ntrails = 5
     for i in tqdm(list(np.random.randint(0,high=100000, size=(Ntrails,)))):
         # print(i)
         # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.9, random_state=i, shuffle=True, stratify=y)
@@ -118,6 +119,7 @@ for d_im, d_hyp, Q_im, Q_hyp in zip(d_im_configs, d_hyp_configs, Q_im_configs, Q
         X_test = (X_test - mu) / std
 
         clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
+        # clf = SVC(kernel='poly', degree=2)
         # clf = GaussianNB()
         clf.fit(X_train, y_train)
         y_pred = clf.predict(X_test)

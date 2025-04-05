@@ -5,6 +5,8 @@ from typing import List, Tuple, Dict
 from torch import Tensor
 import torch
 from math import ceil
+import gc
+torch.backends.cuda.cufft_plan_cache[0].max_size = 0
 
 
 class SeparableScattering:
@@ -153,7 +155,7 @@ class SeparableScattering:
         EPS = 1e-10
         return x1 / (xn + EPS)
         
-    def _scattering(self, x: Tensor, returnU = False, returnSpath = False, normalise=False):      
+    def _scattering(self, x: Tensor, returnU = False, returnSpath = False, normalise=False, scat_to_cpu = True):      
         
         # Kymatio's scattering has a near-identical implementation
           
@@ -174,7 +176,7 @@ class SeparableScattering:
         X = fft(x)
         del x
         s_0 = unpad(ifft(mulds(X, 0, [1 for _ in range(self.Ndim)], lambda_zero)).real)
-        S = [s_0]
+        S = [s_0.cpu() if scat_to_cpu else s_0]
         Up = {}
         Sp = {}
         
@@ -185,22 +187,28 @@ class SeparableScattering:
         #first level
         Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim)
         for lambda1 in Lambda_1:   
-                    
+            gc.collect()
             torch.cuda.empty_cache()
             u_1 = modulus(ifft(mulds(X, 0, l0_compounded_ds, lambda1)))
             U_1 = fft(u_1)
-            del u_1
+            if not returnU: del u_1
             l1_compounded_ds = self._get_compounded_downsample_factor(0, l0_compounded_ds, lambda1)
             s_1 = ifft(mulds(U_1, 0, l1_compounded_ds, lambda_zero)).real
             s_1 = unpad(s_1)
             if normalise: s_1 = self._normalise(s_1, s_0)
-            S.append(s_1)            
+            if scat_to_cpu:                 
+                S.append(s_1.cpu())
+                del s_1
+            else: S.append(s_1)   
+                     
             
-            if returnU:     Up[lambda1] = u_1
+            if returnU:     Up[lambda1] = u_1 
             if returnSpath: Sp[lambda1] = s_1
             
-            if self.Nlevels == 1: continue
-            # print(f'{lambda1} ->')
+            if self.Nlevels == 1: 
+                del U_1
+                continue
+            
             #second level
             Lambda_2 = get_Lambda_set(self.fb, 1, l1_compounded_ds)
             for lambda2 in Lambda_2:                
@@ -208,11 +216,15 @@ class SeparableScattering:
                 # print(f'\t{lambda2}')
                 u_2 = modulus(ifft(mulds(U_1, 1, l1_compounded_ds, lambda2)))
                 U_2 = fft(u_2)
-                del u_2
+                if not returnU: del u_2
                 l2_compounded_ds = self._get_compounded_downsample_factor(1, l1_compounded_ds, lambda2)
                 s_2 = unpad(ifft(mulds(U_2, 1, l2_compounded_ds, lambda_zero)).real)
                 if normalise: s_2 = self._normalise(s_2, s_1)
-                S.append(s_2)   
+                if scat_to_cpu:                 
+                    S.append(s_2.cpu())
+                    del s_2
+                else: S.append(s_2)     
+                
                 
                 if returnU:     Up[(lambda1, lambda2)] = u_2
                 if returnSpath: Sp[(lambda1, lambda2)] = s_2

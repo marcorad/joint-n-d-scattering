@@ -90,7 +90,7 @@ acc = []
 Ntrails = 20
 for i in tqdm(list(np.random.randint(0,high=100000, size=(Ntrails,)))):
     # print(i)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.9, random_state=i, shuffle=True, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.95, random_state=i, shuffle=True, stratify=y)
     # train_idx, test_idx = split(y)
     # X_train, y_train = X[train_idx, :], y[train_idx]
     # X_test, y_test = X[test_idx, :], y[test_idx]
