@@ -40,7 +40,7 @@ for iq, Q in enumerate(Q_CONFIGS):
     print(d)
 
     torch.cuda.empty_cache()    
-    ws = SeparableScattering([28, 28], d, Q)
+    ws = SeparableScattering([28, 28], d, Q, remove_highly_corr_filter=True)
 
 
     from sklearn import datasets, metrics, svm
@@ -70,8 +70,8 @@ for iq, Q in enumerate(Q_CONFIGS):
     #extract features with SWS
     norm = False
     t0 = time()
-    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm, batch_size=10000).cpu()
-    S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm).cpu()
+    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm, batch_size=10000, scat_to_cpu=False).cpu()
+    S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm, scat_to_cpu=False).cpu()
     torch.cuda.synchronize()
     t1 = time()
     print("Sep Scattering took {:.2f} ms".format((t1 - t0)*1000))
@@ -126,8 +126,8 @@ for iq, Q in enumerate(Q_CONFIGS):
         
 
         #normalise the features
-        mu = np.mean(S_train_sel, axis=0)
-        std = np.std(S_train_sel, axis=0)
+        mu = 0 #np.mean(S_train_sel, axis=0)
+        std = 1 #np.std(S_train_sel, axis=0)
         S_train_sel = (S_train_sel-mu)/std
         S_test_n = (S_test_sep-mu)/std
         

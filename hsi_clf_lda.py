@@ -17,20 +17,21 @@ import gc
 from scipy.fftpack import dct    
 from torch import Tensor
 from sepws.scattering.filterbank import get_Lambda_set
+from sklearn.decomposition import PCA
 
+Q = 1
 d_hyp_configs = [8, 16, 32]
-Q_hyp_configs = [1, 1 ,  1]
 d_im_configs =  [4, 4 ,  4]
-Q_im_configs =  [1, 1 ,  1]
 
-# d_hyp_configs = [16, 32]
-# Q_hyp_configs = [1 , 1 ]
-# d_im_configs =  [4 , 4 ]
-# Q_im_configs =  [1 , 1 ]
 cfg.cuda()
+
 cfg.set_alpha(1,    2.5, False)
 cfg.set_alpha(1,    1.8, True)
 cfg.set_beta(1,     2.5)
+
+# cfg.set_alpha(Q,    3.5, False)
+# cfg.set_alpha(Q,    3.5, True)
+# cfg.set_beta(Q,     2.5)
 
 hsi_data = hsi.load()
 
@@ -45,7 +46,7 @@ for hsi_im in hsi_data[:]:
 
     res = []
 
-    for d_im, d_hyp, Q_im, Q_hyp in zip(d_im_configs, d_hyp_configs, Q_im_configs, Q_hyp_configs):
+    for d_im, d_hyp in zip(d_im_configs, d_hyp_configs):
         gc.collect()
         
         
@@ -58,7 +59,7 @@ for hsi_im in hsi_data[:]:
         
         torch.cuda.empty_cache()
 
-        sws = SeparableScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q_im], [Q_im], [Q_hyp]], allow_ds=[False, False, True])
+        sws = SeparableScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q], [Q], [Q]], allow_ds=[False, False, True], remove_highly_corr_filter=True)
         X = torch.from_numpy(X[None, :, :, :]).cuda()
         s = sws.scattering(X).cpu().numpy()[0, :, :, :, :]
         
@@ -123,14 +124,20 @@ for hsi_im in hsi_data[:]:
             X_train, y_train = X[train_idx, :], y[train_idx]
             X_test, y_test = X[test_idx, :], y[test_idx]
             
-            # print(X_train.shape)
             
-            mu = np.mean(X_train, axis=0)
-            std = np.std(X_train, axis=0)
+            mu = 0 # np.mean(X_train, axis=0)
+            std = 1 # np.std(X_train, axis=0)
             X_train = (X_train - mu) / std
             X_test = (X_test - mu) / std
+            
+            # pca = PCA(n_components=1000)
+            # pca.fit(np.concatenate([X_train, X_test], 0))
+            # X_train = pca.transform(X_train)
+            # X_test = pca.transform(X_test)
+            # print(X_train.shape)
 
             clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
+            # clf = LinearDiscriminantAnalysis(solver='svd')
             # clf = SVC(kernel='poly', degree=2)
             # clf = GaussianNB()
             clf.fit(X_train, y_train)
@@ -140,10 +147,10 @@ for hsi_im in hsi_data[:]:
         # print(acc)
         oa = np.array(acc)*100
         print('Randomised trials overall accuracy (%) result')
-        print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q_im, Q_im, Q_hyp)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
+        print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q, Q, Q)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
         
         res += [{
-            'Q': (Q_im, Q_im, Q_hyp),
+            'Q': (Q, Q, Q),
             'd': (d_im, d_im, d_hyp),
             'mean': np.mean(oa),
             'std': np.std(oa),

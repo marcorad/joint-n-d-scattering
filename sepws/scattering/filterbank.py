@@ -253,13 +253,14 @@ def filterbank_to_tensor(fb: List):
     """
     _for_each_filter(fb, _convert_to_tensor)
     
-def get_Lambda_set(fb: List, level: int, input_ds):
+def get_Lambda_set(fb: List, level: int, input_ds, remove_highly_corr_filters = False):
     """Get the set of all lambda filter combinations for a filterbank given a level and amount of compounded input downsampling.
 
     Args:
         fb (List): The filterbank generated with scattering_filterbanks.
         level (int): The scattering level (filterbank index)
         input_ds (int): The compounded amount of input downsampling
+        remove_highly_corr_filters (bool): Whether to remove filters which are highly correlated, i.e., on-axis filters with negative frequency
     Returns:
         List[Tuple[float...]]: A list containing tuples of all centre frequencies of a multidimensional separable filter.
     """
@@ -267,7 +268,15 @@ def get_Lambda_set(fb: List, level: int, input_ds):
     for dim, fb_dim in enumerate(fb):
         lambdas.append([0] + list(fb_dim[level][input_ds[dim]]['psi'].keys()))
     Lambda = list(product(*lambdas))[1:] # remove vec(0) lambda
-    return Lambda
+    if remove_highly_corr_filters:
+        Lambda_final = []
+        for L in Lambda:
+            if any([l == 0 for l in L]) and any([l <0 for l in L]):
+                continue
+            Lambda_final.append(L)
+        return Lambda_final
+    else:
+        return Lambda
 
 
         

@@ -11,7 +11,7 @@ torch.backends.cuda.cufft_plan_cache[0].max_size = 0
 
 class SeparableScattering:
     backend: TorchBackend = TorchBackend()
-    def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds: List[bool] = None) -> None:
+    def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds: List[bool] = None, remove_highly_corr_filter = False) -> None:
         """Create a separable scattering object, which precalculates the filters.
 
         Args:
@@ -20,8 +20,10 @@ class SeparableScattering:
             Q (List[List[float]]): A list containing the Qs used for each level of the scattering operation. Each item should be a list with Q corresponding to a specific dimension.
             startfreq (List[float], optional): The starting frequencies to place the filters of first-level scattering. When None, the frequency domain is fully covered. Defaults to None.
             allow_ds (bool, optional): Allow downsampling to occur for efficient computation. Defaults to True.
+            remove_highly_corr_filters (bool): Whether to remove filters which are highly correlated, i.e., on-axis filters with negative frequency. Defaults to false.    
         """
         self.pad = []
+        self.remove_corr_filters = remove_highly_corr_filter
         self.Npad = []
         self.Ndim = len(N)
         self.d = d
@@ -94,14 +96,14 @@ class SeparableScattering:
             if cfg.get_beta_prune()*sigma_psi_w_demod < abs(lf): return True # - sigma_psi_w_filt * beta + EPS
         return False
     
-    def scattering(self, x: Tensor, normalise = False, batch_size = None) -> Tensor:
+    def scattering(self, x: Tensor, normalise = False, batch_size = None, scat_to_cpu=True) -> Tensor:
         """Perform a separable scattering transform on a real signal x.
 
         Args:
             x (Tensor): A tensor with shape (Nbatch, ...), the dimensions from 1 onwards are the scattering dimensions.
             normalise (bool, optional): normalise scattering coefficients with respect to the previous level. Defaults to False.
             batch_size (int, optional): compute scattering in batches for memory usage reduction. If None, computes all items in the batch dimension. Default to None.
-
+            
         Returns:
             Tensor: The scattering features, with the last axis corresponding to the various filters paths.
         """
@@ -113,7 +115,7 @@ class SeparableScattering:
             begin = i * batch_size
             end = min((i+1)*batch_size, N)
             x_b = x[begin:end, ...].to(cfg.DEVICE)        
-            s, _, _ = self._scattering(x_b, False, False, normalise) 
+            s, _, _ = self._scattering(x_b, returnU=False, returnSpath=False, normalise=normalise, scat_to_cpu=scat_to_cpu) 
             S.append(self.backend.stack(s, dim=1)) # stack all features into a single tensor              
         return self.backend.concat(S, dim=0) # concat all batches
     
@@ -127,7 +129,7 @@ class SeparableScattering:
             'phi_ds': l0_compounded_ds
         })        
         #first level
-        Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim)
+        Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim, self.remove_corr_filters)
         for lambda1 in Lambda_1:  
             l1_compounded_ds = self._get_compounded_downsample_factor(0, l0_compounded_ds, lambda1)
             paths.append({
@@ -138,7 +140,7 @@ class SeparableScattering:
             })            
             if self.Nlevels == 1: continue            
             #second level
-            Lambda_2 = get_Lambda_set(self.fb, 1, l1_compounded_ds)
+            Lambda_2 = get_Lambda_set(self.fb, 1, l1_compounded_ds, self.remove_corr_filters)
             for lambda2 in Lambda_2:                
                 if self._should_prune(lambda2, lambda1, 1): continue #prune the paths, since downsampling prunes to an inexact extent
                 l2_compounded_ds = self._get_compounded_downsample_factor(1, l1_compounded_ds, lambda2)
@@ -185,9 +187,9 @@ class SeparableScattering:
         if returnSpath: Sp[lambda_zero] = s_0
         
         #first level
-        Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim)
+        Lambda_1 = get_Lambda_set(self.fb, 0, [1]*self.Ndim, self.remove_corr_filters)
         for lambda1 in Lambda_1:   
-            gc.collect()
+            # if scat_to_cpu: gc.collect()
             torch.cuda.empty_cache()
             u_1 = modulus(ifft(mulds(X, 0, l0_compounded_ds, lambda1)))
             U_1 = fft(u_1)
@@ -210,7 +212,7 @@ class SeparableScattering:
                 continue
             
             #second level
-            Lambda_2 = get_Lambda_set(self.fb, 1, l1_compounded_ds)
+            Lambda_2 = get_Lambda_set(self.fb, 1, l1_compounded_ds, self.remove_corr_filters)
             for lambda2 in Lambda_2:                
                 if self._should_prune(lambda2, lambda1, 1): continue #prune the paths, since downsampling prunes to an inexact extent
                 # print(f'\t{lambda2}')

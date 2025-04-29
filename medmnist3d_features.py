@@ -4,7 +4,12 @@ import numpy as np
 import sys
 sys.path.append('../python')
 from sepws.scattering.config import cfg
+
+Q = 1
 cfg.cuda()
+cfg.set_alpha(Q,    3.5, False)
+cfg.set_alpha(Q,    3.5, True)
+cfg.set_beta(Q,     2.5)
 
 from sepws.scattering.separable_scattering import SeparableScattering
 
@@ -54,12 +59,12 @@ def augment_train(X, y, tot_examples_in_each_class, keep_prop = True):
         
     
 
-Q = [[1], [1], [1]]
-d = [8]*3
+Q = [[Q], [Q], [Q]]
+d = [4]*3
 N = [28, 28, 28]
 AUG = False
 
-ws = SeparableScattering(N, d, Q)
+ws = SeparableScattering(N, d, Q, remove_highly_corr_filter=True)
 
 
 

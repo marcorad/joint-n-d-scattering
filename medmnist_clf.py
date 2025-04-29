@@ -30,7 +30,7 @@ class DeepClassifier(nn.Module):
             self.bn.append(nn.BatchNorm1d(hidden_sizes[i+1]))
         self.lin_out = nn.Linear(hidden_sizes[-1], num_classes) if num_classes > 2 else nn.Linear(hidden_sizes[-1], 1)
         self.soft_max = nn.Softmax(dim=1) if num_classes > 2 else nn.Sigmoid()
-        self.non_linearity = nn.Tanh()
+        self.non_linearity = nn.ReLU()
         
     def forward(self, x):
         y = self.non_linearity(self.bn_in(self.lin_in(x)))
@@ -121,7 +121,7 @@ class LinearTrainer:
         y_val = nn.functional.one_hot(y_val).type(torch.float32).cuda() if n_classes > 2 else y_val.type(torch.float32).cuda()
         # print(X_train.device, X_test.device, y_train.device, y_test.device)
         generator = torch.Generator(device='cuda')
-        self.batch_size = 256
+        self.batch_size = 32
         # self.loader = BalancedDataLoader(X_train, y_train, 32, 0.2, n_classes>2)
         self.loader = DataLoader(TensorDataset(X_train, y_train), batch_size=self.batch_size, generator=generator, shuffle=True)
         optim = torch.optim.Adam(params=self.model.parameters(), lr = lr)
@@ -249,19 +249,19 @@ for d in DATASETS:
     # X_test = X_test / torch.max(X_test, dim=1, keepdim=True)[0]
     # X_val = X_val / torch.max(X_val, dim=1, keepdim=True)[0]
 
-    # mu = torch.mean(X_train, axis=0)
-    # std = torch.std(X_train, axis=0)
+    mu = 0 #torch.mean(X_train, axis=0)
+    std = 1 #torch.std(X_train, axis=0)
     # print(torch.any(std < 1e-12))
 
-    # X_train = (X_train - mu)/std
-    # X_test = (X_test - mu)/std
-    # X_val = (X_val - mu)/std
+    X_train = (X_train - mu)/std
+    X_test = (X_test - mu)/std
+    X_val = (X_val - mu)/std
     
         
-    # if EN_LDA_DR:
-    #     lda = LDA(priors=[1/n_classes for _ in range(n_classes)])
-    #     X_train = lda.fit_transform(X_train, y_train)
-    #     X_test = lda.transform(X_test)
+    if EN_LDA_DR:
+        lda = LDA(priors=[1/n_classes for _ in range(n_classes)])
+        X_train = lda.fit_transform(X_train, y_train)
+        X_test = lda.transform(X_test)
         
     # clf = SVC(verbose=False, probability=True)
 
@@ -276,23 +276,23 @@ for d in DATASETS:
     #     f"AUC={metrics.roc_auc_score(y_test, y_prob, multi_class='ovo')}"
     # )
     
-    print(X_train.shape)
-    net = DeepClassifier(X_train.shape[1],[128, 64, 32], n_classes)
+    # print(X_train.shape)
+    net = DeepClassifier(X_train.shape[1],[1024, 512, 256], n_classes)
     trainer = LinearTrainer(net)
     print(trainer.num_trainable_parameters())
-    trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-5)
+    trainer.train(X_train, y_train, X_val, y_val, n_epochs=100, lr=1e-4 if d != 'fracture' else 1e-9)
     acc, auc = trainer.test_acc(X_test, y_test)
     results[d] = {'acc': acc.item(), 'auc': auc, 'n_classes': n_classes}
     print(f'Test Accuracy: {acc: .3f}, AUC: {auc: .3f}')
     
-    lda = LDA(solver='eigen', shrinkage='auto')
+    lda = LDA(solver='svd')
     lda.fit(X_train.cpu().numpy(), y_train.cpu().numpy())
     y_pred = lda.predict(X_test.cpu().numpy())
     y_prob = lda.predict_proba(X_test.cpu().numpy())
     
     y_oh = np.zeros_like(y_prob)
     y_oh[np.arange(y_oh.shape[0]), y_test.type(torch.int32).numpy()] = 1
-    print(d, metrics.accuracy_score(y_test.numpy(), y_pred), metrics.roc_auc_score(y_oh, y_prob))
+    print(d, metrics.accuracy_score(y_test.numpy(), y_pred), metrics.roc_auc_score(y_oh, y_prob, multi_class='ovo'))
   
   
 import pprint    

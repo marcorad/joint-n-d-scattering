@@ -3,16 +3,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sepws.scattering.config import cfg
 
-cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    1.8, True)
-cfg.set_beta(1,     2.5)
+Q = 1
+cfg.set_alpha(Q,    3.5, False)
+cfg.set_alpha(Q,    3.5, True)
+cfg.set_beta(Q,     2.5)
 
 N = [256, 256]
-d = [4, 2]
+d = [4, 8]
 Npad = [filterbank.calculate_padding_1d(n, di)[2] for n, di in zip(N, d)]
 print(Npad)
 
-fb = filterbank.scattering_filterbank_separable(Npad, d, [[1], [1]], allow_ds=[False, False])
+fb = filterbank.scattering_filterbank_separable(Npad, d, [[Q], [Q]], allow_ds=[False, False])
 lambdas = filterbank.get_Lambda_set(fb, 0, [1, 1])
 print(len(lambdas))
 for l in lambdas:
