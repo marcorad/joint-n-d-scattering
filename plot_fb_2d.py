@@ -1,15 +1,15 @@
-from sepws.scattering import filterbank
+from jws.scattering import filterbank
 import matplotlib.pyplot as plt
 import numpy as np
-from sepws.scattering.config import cfg
+from jws.scattering.config import cfg
 
 Q = 1
-cfg.set_alpha(Q,    3.5, False)
-cfg.set_alpha(Q,    3.5, True)
+cfg.set_alpha(Q,    2.0, False)
+cfg.set_alpha(Q,    2.0, True)
 cfg.set_beta(Q,     2.5)
 
 N = [256, 256]
-d = [4, 8]
+d = [8,8]
 Npad = [filterbank.calculate_padding_1d(n, di)[2] for n, di in zip(N, d)]
 print(Npad)
 
@@ -28,7 +28,7 @@ Y = np.linspace(-0.5, 0.5, Npad[0])
 s = np.zeros(Npad)
 
 
-c = 0.7
+c = 0.75
 
 for l in lambdas:
     psi0 = filterbank.get_wavelet_filter(fb, 0, 0, 1, l[0])

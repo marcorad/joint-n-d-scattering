@@ -3,17 +3,17 @@ import numpy as np
 
 import sys
 sys.path.append('../python')
-from sepws.scattering.config import cfg
+from jws.scattering.config import cfg
 
-Q = 1
+Q = 0.75
 cfg.cuda()
-cfg.set_alpha(Q,    3.5, False)
-cfg.set_alpha(Q,    3.5, True)
+cfg.set_alpha(Q,    2.5, False)
+cfg.set_alpha(Q,    2.5, True)
 cfg.set_beta(Q,     2.5)
 
-from sepws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.separable_scattering import SeparableScattering
 
-from sepws.dataprocessing.medmnist3d import load_train_test, DATASETS
+from jws.dataprocessing.medmnist3d import load_train_test, DATASETS
 from scipy.spatial.transform import Rotation as R
 from scipy.ndimage import affine_transform
 
@@ -59,7 +59,7 @@ def augment_train(X, y, tot_examples_in_each_class, keep_prop = True):
         
     
 
-Q = [[Q], [Q], [Q]]
+Q = [[Q, Q], [Q, Q], [Q, Q]]
 d = [4]*3
 N = [28, 28, 28]
 AUG = False

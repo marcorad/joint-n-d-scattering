@@ -5,7 +5,7 @@ from sklearn import metrics
 import pickle as pkl
 from sklearn import metrics
 import torch
-from sepws.dataprocessing.medmnist3d import DATASETS
+from jws.dataprocessing.medmnist3d import DATASETS
 from sklearn.preprocessing import MultiLabelBinarizer
 
 import torch
@@ -190,7 +190,7 @@ class LinearTrainer:
             X_test = X_test.cuda()
             y_pred = self.model(X_test)
             
-            auc = metrics.roc_auc_score(y_test.cpu().numpy(), y_pred.cpu().numpy(), multi_class='ovo')
+            auc = metrics.roc_auc_score(y_test.cpu().numpy(), y_pred.cpu().numpy())
             
             y_true = torch.argmax(y_test, dim=1) if self.n_classes > 2 else y_test.cuda()
             y_pred = torch.argmax(y_pred, dim=1) if self.n_classes > 2 else y_pred[:,0].cuda()
@@ -219,7 +219,7 @@ for d in DATASETS:
         f"{d}\n"
         "---------\n"
     )
-    fname = f'data/ws-{d}-mnist3d-Q=[[1], [1], [1]].pkl' #run medmnist3d_features.py before running this
+    fname = f'data/ws-{d}-mnist3d-Q=[[0.75, 0.75], [0.75, 0.75], [0.75, 0.75]].pkl' #run medmnist3d_features.py before running this
     with open(fname, 'rb') as file:
         X_train, y_train, X_test, y_test, X_val, y_val = pkl.load(file)
         y_train = torch.from_numpy(y_train.astype(np.float32))

@@ -1,26 +1,23 @@
-# ----------------------------------------------------------
-# Results not shown in paper due to space constraints - this 
-# evaluates LDA, and SepWS is slightly worse than 2D
-# ---------------------------------------------------------- 
 
-import sepws.scattering.config as config
+
+import jws.scattering.config as config
 # config.MORLET_DEFINITION = config.MORLET_DEF_DEFAULT
 
 
-from sepws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.separable_scattering import SeparableScattering
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from time import time
 
-from sepws.scattering.config import cfg
+from jws.scattering.config import cfg
+from sklearn.model_selection import train_test_split
 
 cfg.cuda()
 cfg.set_alpha(1,    2.5, False)
 cfg.set_alpha(1,    1.8, True)
 cfg.set_beta(1,     2.5)
-
-
+cfg.set_beta_prune(2.0)
 from sklearn.preprocessing import normalize
 
 torch.cuda.empty_cache()
@@ -120,8 +117,12 @@ for iq, Q in enumerate(Q_CONFIGS):
     for train_size in TRAIN_SIZES: 
         
         #select the training examples
-        S_train_sel = S_train_sep[:train_size, :]
-        y_train_sel = y_train[:train_size] 
+        
+        if train_size < 60000:
+            S_train_sel, _, y_train_sel, _ = train_test_split(S_train_sep, y_train, train_size=train_size, stratify=y_train, random_state=1)
+            assert S_train_sel.shape[0] == train_size, f'{S_train_sel.shape}'
+        else:
+            S_train_sel, y_train_sel = S_train_sep.copy(), y_train.copy()
         
         
 
@@ -136,7 +137,7 @@ for iq, Q in enumerate(Q_CONFIGS):
         # print('SEP CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
-        clf = LinearDiscriminantAnalysis(solver='eigen', priors=[1/10]*10, shrinkage=0.005)
+        clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
         # clf = svm.SVC()
         clf.fit(S_train_sel, y_train_sel)
 
@@ -149,12 +150,14 @@ for iq, Q in enumerate(Q_CONFIGS):
         print(f'Sep {acc=}')
         
          #select the training examples
-        S_train_sel = S_train_2d[:train_size, :]
-        y_train_sel = y_train[:train_size]  
+        if train_size < 60000:
+            S_train_sel, _, y_train_sel, _ = train_test_split(S_train_2d, y_train, train_size=train_size, stratify=y_train, random_state=1)
+        else:
+            S_train_sel, y_train_sel = S_train_2d.copy(), y_train.copy()
 
         #normalise the features
-        mu = np.mean(S_train_sel, axis=0)
-        std = np.std(S_train_sel, axis=0)
+        mu = 0 #np.mean(S_train_sel, axis=0)
+        std = 1 #np.std(S_train_sel, axis=0)
         S_train_sel = (S_train_sel-mu)/std
         S_test_n = (S_test_2d-mu)/std
         
@@ -163,7 +166,7 @@ for iq, Q in enumerate(Q_CONFIGS):
         # print('2D CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
-        clf = LinearDiscriminantAnalysis(solver='eigen', priors=[1/10]*10, shrinkage=0.005)
+        clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
         clf.fit(S_train_sel, y_train_sel)
 
         #predict

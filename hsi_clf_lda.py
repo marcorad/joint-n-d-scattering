@@ -1,33 +1,27 @@
 import numpy as np
 
-import matplotlib.pyplot as plt
-from sepws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.separable_scattering import SeparableScattering
 import torch
-from sepws.scattering.config import cfg
-from skimage.measure import block_reduce
-from scipy.stats import mode
+from jws.scattering.config import cfg
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
-from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import train_test_split
-from sklearn import metrics
 from tqdm import tqdm
-from sklearn.svm import SVC
-from sepws.dataprocessing import hsi
+from jws.dataprocessing import hsi
 import gc
-from scipy.fftpack import dct    
-from torch import Tensor
-from sepws.scattering.filterbank import get_Lambda_set
-from sklearn.decomposition import PCA
 
-Q = 1
-d_hyp_configs = [8, 16, 32]
-d_im_configs =  [4, 4 ,  4]
+Q = 0.75
+d_hyp_configs = [8, 16, 4, 8, 16, 4, 8]
+d_im_configs =  [2, 2, 4, 4, 4,  8, 8]
+
+# d_hyp_configs = [4, 8]
+# d_im_configs =  [8, 8]
+
 
 cfg.cuda()
 
-cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    1.8, True)
-cfg.set_beta(1,     2.5)
+cfg.set_alpha(Q,    2.5, False)
+cfg.set_alpha(Q,    2.5, True)
+cfg.set_beta(Q,     2.5)
 
 # cfg.set_alpha(Q,    3.5, False)
 # cfg.set_alpha(Q,    3.5, True)
@@ -37,8 +31,8 @@ hsi_data = hsi.load()
 
 for hsi_im in hsi_data[:]:
     gc.collect()
-    
-    if hsi_im['name'] not in ['indian_pines_corrected', 'KSC', 'paviaU']: continue
+    print(hsi_im['name'])
+    if hsi_im['name'] not in ['indian_pines_corrected', 'KSC', 'paviaU', 'Botswana']: continue
     
     print('\n------------------------')
     print(hsi_im['name'])
@@ -115,53 +109,56 @@ for hsi_im in hsi_data[:]:
         
         gc.collect()
 
-        acc = []
-        Ntrails = 20
-        for i in tqdm(list(np.random.randint(0,high=100000, size=(Ntrails,)))):
-            # print(i)
-            # X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.9, random_state=i, shuffle=True, stratify=y)
-            train_idx, test_idx = split(y)
-            X_train, y_train = X[train_idx, :], y[train_idx]
-            X_test, y_test = X[test_idx, :], y[test_idx]
-            
-            
-            mu = 0 # np.mean(X_train, axis=0)
-            std = 1 # np.std(X_train, axis=0)
-            X_train = (X_train - mu) / std
-            X_test = (X_test - mu) / std
-            
-            # pca = PCA(n_components=1000)
-            # pca.fit(np.concatenate([X_train, X_test], 0))
-            # X_train = pca.transform(X_train)
-            # X_test = pca.transform(X_test)
-            # print(X_train.shape)
+        sizes = [15, -1]
+        for sz in sizes:
+            acc = []
+            Ntrails = 10
+            gc.collect()
+            n = 15
+            if sz == -1:
+                n = 0.1 if hsi_im['name'] == 'indian_pines_corrected' else 0.05
+            print(n)
+            for i in tqdm(list(np.random.randint(0,high=100000, size=(Ntrails,)))):
+                # print(i)
+                if n < 1:
+                    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=n, random_state=i, shuffle=True, stratify=y)
+                else:
+                    train_idx, test_idx = split(y)
+                    X_train, y_train = X[train_idx, :], y[train_idx]
+                    X_test, y_test = X[test_idx, :], y[test_idx]
+                
+                
+                mu =  np.mean(X_train, axis=0)
+                std =  np.std(X_train, axis=0)
+                X_train = (X_train - mu) / std
+                X_test = (X_test - mu) / std
+                c, counts = np.unique(y, return_counts=True)
+                c = len(c)
 
-            clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
-            # clf = LinearDiscriminantAnalysis(solver='svd')
-            # clf = SVC(kernel='poly', degree=2)
-            # clf = GaussianNB()
-            clf.fit(X_train, y_train)
-            y_pred = clf.predict(X_test)
-            acc.append(np.sum(y_pred == y_test) / len(y_pred))
+                clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
+                clf.fit(X_train, y_train)
+                y_pred = clf.predict(X_test)
+                acc.append(np.sum(y_pred == y_test) / len(y_pred))
+                
+            # print(acc)
+            oa = np.array(acc)*100
+            print('Randomised trials overall accuracy (%) result')
+            print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q, Q, Q)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
             
-        # print(acc)
-        oa = np.array(acc)*100
-        print('Randomised trials overall accuracy (%) result')
-        print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q, Q, Q)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
-        
-        res += [{
-            'Q': (Q, Q, Q),
-            'd': (d_im, d_im, d_hyp),
-            'mean': np.mean(oa),
-            'std': np.std(oa),
-            'min': np.min(oa),
-            'max': np.max(oa),
-            'raw': oa.tolist(),
-            'nfeat': X_train.shape[1]
-        }]
+            res += [{
+                'Q': (Q, Q, Q),
+                'd': (d_im, d_im, d_hyp),
+                'mean': np.mean(oa),
+                'std': np.std(oa),
+                'min': np.min(oa),
+                'max': np.max(oa),
+                'raw': oa.tolist(),
+                'nfeat': X_train.shape[1],
+                'ntrain': n
+            }]
         
     import json
-    with open(f"/home/marco/Repos/seperable-wavelet-scattering/{hsi_im['name']}-results.json", 'w') as file:
+    with open(f"hsi-results/{hsi_im['name']}-results.json", 'w') as file:
         json.dump(res, file, indent=4)
     
 
