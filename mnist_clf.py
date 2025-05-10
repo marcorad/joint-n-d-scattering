@@ -1,7 +1,4 @@
-
-
 import jws.scattering.config as config
-# config.MORLET_DEFINITION = config.MORLET_DEF_DEFAULT
 
 
 from jws.scattering.separable_scattering import SeparableScattering
@@ -15,9 +12,9 @@ from sklearn.model_selection import train_test_split
 
 cfg.cuda()
 cfg.set_alpha(1,    2.5, False)
-cfg.set_alpha(1,    1.8, True)
+cfg.set_alpha(1,    2.0, True)
 cfg.set_beta(1,     2.5)
-cfg.set_beta_prune(2.0)
+cfg.set_beta_prune(2.5)
 from sklearn.preprocessing import normalize
 
 torch.cuda.empty_cache()
@@ -33,7 +30,7 @@ Q_CONFIGS = [
 results = {}
 
 for iq, Q in enumerate(Q_CONFIGS):
-    d = [8]*2
+    d = [6]*2
     print(d)
 
     torch.cuda.empty_cache()    
@@ -53,21 +50,13 @@ for iq, Q in enumerate(Q_CONFIGS):
     y_train = np.array(y_train)
     X_test = torch.from_numpy(np.array(X_test).reshape((-1, 28, 28))).type(cfg.REAL_DTYPE)
     y_test = np.array(y_test)
-
-    # normalise the images
-    # mu = np.mean(X_train)
-    # sigma = np.std(X_train)
-    # X_train = (X_train)/sigma
-    # X_test = (X_test)/sigma
-
-    # SVM classifier with multiclass support
     
     torch.cuda.empty_cache()
 
-    #extract features with SWS
+    #extract features
     norm = False
     t0 = time()
-    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm, batch_size=10000, scat_to_cpu=False).cpu()
+    S_train_sep = ws.scattering(X_train.to(cfg.DEVICE), normalise=norm, batch_size=8000, scat_to_cpu=True).cpu()
     S_test_sep  = ws.scattering(X_test.to(cfg.DEVICE), normalise=norm, scat_to_cpu=False).cpu()
     torch.cuda.synchronize()
     t1 = time()
@@ -95,36 +84,20 @@ for iq, Q in enumerate(Q_CONFIGS):
     S_train_2d: np.ndarray = S_train_2d.cpu().numpy()
     S_test_2d: np.ndarray = S_test_2d.cpu().numpy()
 
-    # #perform Mallat's L2 norm
-    # # norm = np.max(np.sqrt(np.sum(S_train**2, axis=(1, 2), keepdims=True)), axis=3, keepdims=True)
-    # # S_train /= norm
-    # # norm = np.max(np.sqrt(np.sum(S_test**2, axis=(1, 2), keepdims=True)), axis=3, keepdims=True)
-    # # S_test /= norm
-
     # #flatten
     S_train_sep = S_train_sep.reshape(S_train_sep.shape[0], np.prod(S_train_sep.shape[1:]))
     S_test_sep = S_test_sep.reshape(S_test_sep.shape[0], np.prod(S_test_sep.shape[1:]))
     S_train_2d = S_train_2d.reshape(S_train_2d.shape[0], np.prod(S_train_2d.shape[1:]))
     S_test_2d = S_test_2d.reshape(S_test_2d.shape[0], np.prod(S_test_2d.shape[1:]))
     
-    # print(S_train_sep.shape)
-    # print(S_train_2d.shape)
-    
-    
-    
-    # np.savetxt('MNISTsample.csv', (S_train[1:2, :].T == S_train[1:2, :]*(1 - np.eye(S_train.shape[1]))), fmt='%d')
-
     for train_size in TRAIN_SIZES: 
         
-        #select the training examples
-        
+        #select the training examples        
         if train_size < 60000:
             S_train_sel, _, y_train_sel, _ = train_test_split(S_train_sep, y_train, train_size=train_size, stratify=y_train, random_state=1)
             assert S_train_sel.shape[0] == train_size, f'{S_train_sel.shape}'
         else:
-            S_train_sel, y_train_sel = S_train_sep.copy(), y_train.copy()
-        
-        
+            S_train_sel, y_train_sel = S_train_sep.copy(), y_train.copy()   
 
         #normalise the features
         mu = 0 #np.mean(S_train_sel, axis=0)
@@ -134,11 +107,9 @@ for iq, Q in enumerate(Q_CONFIGS):
         
         corr = np.corrcoef(S_train_sel.T)
         corr_t = np.abs(corr) > 0.9
-        # print('SEP CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
         clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
-        # clf = svm.SVC()
         clf.fit(S_train_sel, y_train_sel)
 
         #predict
@@ -163,7 +134,6 @@ for iq, Q in enumerate(Q_CONFIGS):
         
         corr = np.corrcoef(S_train_sel.T)
         corr_t = np.abs(corr) > 0.95
-        # print('2D CORR', (np.sum(corr_t) - S_train_sel.shape[1])/2, corr.shape)
 
         #train the model
         clf = LinearDiscriminantAnalysis(solver='eigen', shrinkage='auto')
@@ -180,3 +150,13 @@ for iq, Q in enumerate(Q_CONFIGS):
 import pprint
 
 pprint.pprint(results)
+result_str = 'train, 2d l=1, 2d l=2, joint l=1, joint l=2\n'
+print(result_str)
+for t in TRAIN_SIZES:
+    s = "{:5d} & {:.2f} & {:.2f} & {:.2f} & {:.2f} \\".format(t, results[(0, t, '2d')], results[(1, t, '2d')], results[(0, t, 'sep')], results[(1, t, 'sep')])
+    print(s)
+    result_str += s + '\n'
+    
+
+with open(f"mnist-results/results.txt", 'w') as file:
+    file.write(result_str)
