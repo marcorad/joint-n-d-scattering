@@ -1,6 +1,6 @@
 import numpy as np
 
-from jws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.joint_scattering import JointScattering
 import torch
 from jws.scattering.config import cfg
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
@@ -13,19 +13,12 @@ Q = 0.75
 d_hyp_configs = [8, 16, 4, 8, 16, 4, 8]
 d_im_configs =  [2, 2, 4, 4, 4,  8, 8]
 
-# d_hyp_configs = [4, 8]
-# d_im_configs =  [8, 8]
-
 
 cfg.cuda()
 
 cfg.set_alpha(Q,    2.5, False)
 cfg.set_alpha(Q,    2.5, True)
 cfg.set_beta(Q,     2.5)
-
-# cfg.set_alpha(Q,    3.5, False)
-# cfg.set_alpha(Q,    3.5, True)
-# cfg.set_beta(Q,     2.5)
 
 hsi_data = hsi.load()
 
@@ -53,36 +46,24 @@ for hsi_im in hsi_data[:]:
         
         torch.cuda.empty_cache()
 
-        sws = SeparableScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q], [Q], [Q]], allow_ds=[False, False, True], remove_highly_corr_filter=True)
+        sws = JointScattering(list(X.shape), [d_im, d_im, d_hyp], [[Q], [Q], [Q]], allow_ds=[False, False, True], remove_highly_corr_filter=True)
         X = torch.from_numpy(X[None, :, :, :]).cuda()
-        s = sws.scattering(X).cpu().numpy()[0, :, :, :, :]
+        s = sws.scattering(X).cpu().numpy()[0, :, :, :, :]        
         
-        
-        # print(s.shape)
         # unpadding disabled when downsampling is disabled for any dimension, so do it manually
         nb = d_im // 2
         s = s[:, nb:(nb+X.shape[1]), nb:(nb+X.shape[2]), 1:-1]
         print(s.shape)
 
-        # s = dct(dct(s, axis=0), axis=3)
-
-
-        # print(np.unique(labels, return_counts=True)) 
-        # exit()
-
 
         x = np.swapaxes(s, 0, 2).swapaxes(0, 1).reshape((im_shape[0], im_shape[1], -1)).reshape((im_shape[0]*im_shape[1], -1))
         del s
         labels = labels.reshape(im_shape[0]*im_shape[1])
-        # print(x.shape, labels.shape)
-        #drop 0
+        
+        # drop unlabeled pixels
         idx = labels != 0
         X = x[idx, :]
         y = labels[idx]
-        # print(X.shape, y.shape)
-
-        # plt.figure()
-        # plt.imshow(y_im/16, cmap='Set1')
         
         def split(y: np.ndarray, n=15):
             N = len(y)
@@ -102,10 +83,7 @@ for hsi_im in hsi_data[:]:
                     train_idx_ret.append(i)
                 else:
                     test_idx_ret.append(i)        
-            return train_idx_ret, test_idx_ret
-        
-        # train_idx, test_idx = split(y)
-        # print(np.unique(y[train_idx], return_counts=True))
+            return train_idx_ret, test_idx_ret        
         
         gc.collect()
 
@@ -140,7 +118,6 @@ for hsi_im in hsi_data[:]:
                 y_pred = clf.predict(X_test)
                 acc.append(np.sum(y_pred == y_test) / len(y_pred))
                 
-            # print(acc)
             oa = np.array(acc)*100
             print('Randomised trials overall accuracy (%) result')
             print(f'd = {(d_im, d_im, d_hyp)}, Q = {(Q, Q, Q)}: {np.mean(oa):.2f} +- {np.std(oa):.2f} min {np.min(oa):.2f} max {np.max(oa):.2f}')
@@ -161,6 +138,4 @@ for hsi_im in hsi_data[:]:
     with open(f"hsi-results/{hsi_im['name']}-results.json", 'w') as file:
         json.dump(res, file, indent=4)
     
-
-# plt.show()
 

@@ -9,7 +9,7 @@ import gc
 torch.backends.cuda.cufft_plan_cache[0].max_size = 0
 
 
-class SeparableScattering:
+class JointScattering:
     backend: TorchBackend = TorchBackend()
     def __init__(self, N: List[int], d: List[int], Q: List[List[float]], startfreq: List[float] = None, allow_ds: List[bool] = None, remove_highly_corr_filter = False) -> None:
         """Create a separable scattering object, which precalculates the filters.

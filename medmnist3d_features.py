@@ -11,7 +11,7 @@ cfg.set_alpha(Q,    2.5, False)
 cfg.set_alpha(Q,    2.5, True)
 cfg.set_beta(Q,     2.5)
 
-from jws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.joint_scattering import JointScattering
 
 from jws.dataprocessing.medmnist3d import load_train_test, DATASETS
 from scipy.spatial.transform import Rotation as R
@@ -64,7 +64,7 @@ d = [4]*3
 N = [28, 28, 28]
 AUG = False
 
-ws = SeparableScattering(N, d, Q, remove_highly_corr_filter=True)
+ws = JointScattering(N, d, Q, remove_highly_corr_filter=True)
 
 
 

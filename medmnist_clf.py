@@ -148,7 +148,7 @@ for d in DATASETS:
         f"{d}\n"
         "---------\n"
     )
-    fname = f'data/ws-{d}-mnist3d-Q=[[0.75, 0.75], [0.75, 0.75], [0.75, 0.75]].pkl' #run medmnist3d_features.py before running this
+    fname = f'medmnist3d-feats/ws-{d}-mnist3d-Q=[[0.75, 0.75], [0.75, 0.75], [0.75, 0.75]].pkl' #run medmnist3d_features.py before running this
     with open(fname, 'rb') as file:
         X_train, y_train, X_test, y_test, X_val, y_val = pkl.load(file)
         y_train = torch.from_numpy(y_train.astype(np.float32))

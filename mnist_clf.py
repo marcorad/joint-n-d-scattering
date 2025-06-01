@@ -1,7 +1,7 @@
 import jws.scattering.config as config
 
 
-from jws.scattering.separable_scattering import SeparableScattering
+from jws.scattering.joint_scattering import JointScattering
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -34,7 +34,7 @@ for iq, Q in enumerate(Q_CONFIGS):
     print(d)
 
     torch.cuda.empty_cache()    
-    ws = SeparableScattering([28, 28], d, Q, remove_highly_corr_filter=True)
+    ws = JointScattering([28, 28], d, Q, remove_highly_corr_filter=True)
 
 
     from sklearn import datasets, metrics, svm
